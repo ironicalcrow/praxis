@@ -37,3 +37,14 @@ def text_extractor(file_path:str):
     else:
         return ValueError("Unsupported CV Format")
     
+def text_cleaner(text:str):
+    text= text.replace("\x00", " ")
+    text= " ".join(text.split())
+    return text
+
+async def resume_parser(file_path: str):
+    text_extraction= text_extractor(file_path)
+    cleaned_text= text_cleaner(text_extraction)
+    parsed_resume= await extract_resume_with_grok(cleaned_text)
+    
+    return parsed_resume
