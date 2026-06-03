@@ -1,0 +1,6 @@
+# Local generated/debug files
+all_code.txt
+collect_code.py
+
+# Uploaded CV/test files
+backend/uploads/
