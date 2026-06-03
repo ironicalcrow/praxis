@@ -1,3 +1,5 @@
+from app.modules.jobs.schema import JobCard, JobSearchRequest, JobSearchResponse
+from app.modules.CV.schemas import ResumeSchema
 from app.modules.jobs.schema import (
     ApplyOption,
     EmployerReview,
@@ -28,6 +30,7 @@ __all__ = (
     "JobHighlights",
     "JobSearchRequest",
     "JobSearchResponse",
+    "ResumeSchema",
     "RequiredExperience",
     "SalaryInfo",
     "CandidateFitProfile",
