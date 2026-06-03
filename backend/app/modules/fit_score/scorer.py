@@ -1,16 +1,14 @@
 import json
 from typing import Any
 
-import httpx
 from pydantic import ValidationError
 
-from app.core.config import settings
-from app.modules.fit_score.schema import (
-    CandidateFitProfile,
+from app.core.llm_caller import LLMCallerError, call_llm
+from app.schemas import(
+    ResumeSchema,
     FitScoreResponse,
+    JobRequirementProfile
 )
-from app.modules.jobs.schema import JobRequirementProfile
-
 
 class FitScoreScorerError(Exception):
     pass
@@ -76,7 +74,6 @@ def build_job_context(profile: JobRequirementProfile) -> dict[str, Any]:
         "soft_skills": profile.soft_skills,
         "responsibilities": profile.responsibilities,
         "qualifications": profile.qualifications,
-        "benefits": profile.benefits,
         "required_experience_years": profile.required_experience_years,
         "seniority_level": profile.seniority_level,
         "job_function": profile.job_function,
@@ -87,34 +84,65 @@ def build_job_context(profile: JobRequirementProfile) -> dict[str, Any]:
     }
 
 
-def build_candidate_context(candidate: CandidateFitProfile) -> dict[str, Any]:
+def build_candidate_context(candidate: ResumeSchema) -> dict[str, Any]:
     return {
-        "summary": candidate.summary,
+        "name": candidate.name,
+        "location": candidate.location,
         "skills": candidate.skills,
-        "tools_and_technologies": candidate.tools_and_technologies,
-        "methodologies": candidate.methodologies,
-        "soft_skills": candidate.soft_skills,
+        "experience": [
+            {
+                "role": item.role,
+                "organization": item.organization,
+                "description": item.description,
+            }
+            for item in candidate.experience
+        ],
         "projects": [
             {
-                "title": project.title,
+                "name": project.name,
                 "description": project.description,
-                "technologies": project.technologies,
+                "technology": project.technology,
             }
             for project in candidate.projects
         ],
-        "years_experience": candidate.years_experience,
-        "preferred_roles": candidate.preferred_roles,
-        "preferred_work_arrangement": candidate.preferred_work_arrangement,
-        "education": candidate.education,
+        "education": [
+            {
+                "degree": item.degree,
+                "institution": item.institution,
+                "year": item.year,
+                "gpa": item.gpa,
+            }
+            for item in candidate.education
+        ],
+        "certifications": candidate.certifications,
+        "years_of_experience": candidate.years_of_experience,
+        "raw_text": candidate.raw_text,
     }
 
 
 def build_fit_score_prompt(
     profile: JobRequirementProfile,
-    candidate: CandidateFitProfile,
+    candidate: ResumeSchema,
+    add_reasoning: bool = True,
 ) -> str:
     job_context = build_job_context(profile)
     candidate_context = build_candidate_context(candidate)
+
+    if add_reasoning:
+        required_json_shape = """
+{
+  "fit_score": number,
+  "strengths": string[],
+  "weaknesses": string[],
+  "reason": string
+}
+""".strip()
+    else:
+        required_json_shape = """
+{
+  "fit_score": number
+}
+""".strip()
 
     return f"""
 You are a strict but fair job-candidate fit evaluator.
@@ -133,36 +161,23 @@ Important rules:
 - If a candidate project uses the required technology or a very similar technology, count it as strong evidence.
 - If a candidate project has similar responsibilities but different technologies, give partial credit.
 - If the candidate has a similar academic or professional background, count it positively.
-- For developer/software roles, CS, CSE, Software Engineering, backend/frontend/full-stack projects are relevant.
-- For marketing/business/design roles, relevant education, projects, domain, and responsibilities should matter.
-- Consider whether the candidate background is close to the job function, industry, and responsibilities.
-- Consider required skills, preferred skills, tools, technologies, methods, soft skills, responsibilities, education, experience, seniority, and work arrangement.
+- Consider required skills, preferred skills, tools, technologies, responsibilities, education, experience, seniority, and work arrangement.
 - Do not over-score just because one or two keywords match.
 - Do not under-score if different words describe the same practical capability.
 
 Fit score guide:
-- 90-100: Almost perfect match. Most core requirements and project/experience evidence are present.
-- 75-89: Strong fit. Core requirements mostly match, with some minor gaps.
-- 60-74: Moderate fit. Some strong matches, but noticeable gaps.
-- 40-59: Weak fit. Limited match, several important gaps.
-- 0-39: Poor fit. Little evidence of fit.
+- 90-100: Almost perfect match.
+- 75-89: Strong fit.
+- 60-74: Moderate fit.
+- 40-59: Weak fit.
+- 0-39: Poor fit.
 
 Return ONLY valid JSON.
 Do not wrap JSON in markdown.
 Do not add explanation outside JSON.
 
 Required JSON shape:
-{{
-  "fit_score": number,
-  "strengths": string[],
-  "weaknesses": string[],
-  "reason": string
-}}
-
-What to include:
-- strengths: concrete reasons why the candidate matches.
-- weaknesses: concrete gaps or unclear areas.
-- reason: one concise paragraph explaining the final score.
+{required_json_shape}
 
 Job context:
 {json.dumps(job_context, ensure_ascii=False)}
@@ -197,108 +212,56 @@ def extract_json_from_text(text: str) -> dict[str, Any]:
             )
 
 
-async def call_ollama(prompt: str) -> str:
-    url = f"{settings.OLLAMA_BASE_URL}/api/chat"
+async def call_fit_scorer_llm(
+    prompt: str,
+    add_reasoning: bool = True,
+) -> str:
+    if add_reasoning:
+        system_content = (
+            "You evaluate job-candidate fit. "
+            "Return only valid JSON with fit_score, strengths, weaknesses, and reason."
+        )
+    else:
+        system_content = (
+            "You evaluate job-candidate fit. "
+            "Return only valid JSON with fit_score."
+        )
 
-    model = getattr(
-        settings,
-        "OLLAMA_FIT_SCORER_MODEL",
-        getattr(settings, "OLLAMA_JOB_PROFILE_MODEL", "qwen2.5:3b"),
-    )
+    try:
+        return await call_llm(
+            temperature=0.0,
+            json_mode=True,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_content,
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+        )
 
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You evaluate job-candidate fit. "
-                    "Return only valid JSON with fit_score, strengths, weaknesses, and reason."
-                ),
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        "stream": False,
-        "format": "json",
-        "options": {
-            "temperature": 0.0,
-        },
-    }
-
-    timeout = httpx.Timeout(120.0, connect=10.0)
-
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(url, json=payload)
-        response.raise_for_status()
-
-    data = response.json()
-    return data.get("message", {}).get("content", "")
+    except LLMCallerError as e:
+        raise FitScoreScorerError(str(e))
 
 
-async def call_groq(prompt: str) -> str:
-    if not settings.GROQ_API_KEY:
-        raise FitScoreScorerError("GROQ_API_KEY is missing")
-
-    url = "https://api.groq.com/openai/v1/chat/completions"
-
-    model = getattr(
-        settings,
-        "GROQ_FIT_SCORER_MODEL",
-        getattr(settings, "GROQ_JOB_PROFILE_MODEL", "llama-3.1-8b-instant"),
-    )
-
-    headers = {
-        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You evaluate job-candidate fit. "
-                    "Return only valid JSON with fit_score, strengths, weaknesses, and reason."
-                ),
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        "temperature": 0.0,
-        "response_format": {"type": "json_object"},
-    }
-
-    timeout = httpx.Timeout(120.0, connect=10.0)
-
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-
-    data = response.json()
-    return data["choices"][0]["message"]["content"]
-
-
-async def call_fit_scorer_llm(prompt: str) -> str:
-    provider = settings.LLM_PROVIDER.lower()
-
-    if provider == "ollama":
-        return await call_ollama(prompt)
-
-    if provider == "groq":
-        return await call_groq(prompt)
-
-    raise FitScoreScorerError(f"Unsupported LLM_PROVIDER: {provider}")
-
-
-def build_fit_score_response(parsed: dict[str, Any]) -> FitScoreResponse:
+def build_fit_score_response(
+    parsed: dict[str, Any],
+    add_reasoning: bool = True,
+) -> FitScoreResponse:
     score = clamp_fit_score(parsed.get("fit_score"))
     verdict = get_verdict(score)
+
+    if not add_reasoning:
+        return FitScoreResponse(
+            fit_score=score,
+            verdict=verdict,
+            strengths=[],
+            weaknesses=[],
+            reason="Reasoning disabled for job suggestion ranking.",
+        )
 
     strengths = safe_string_list(parsed.get("strengths"))
     weaknesses = safe_string_list(parsed.get("weaknesses"))
@@ -306,7 +269,7 @@ def build_fit_score_response(parsed: dict[str, Any]) -> FitScoreResponse:
     reason = parsed.get("reason")
 
     if not reason:
-        reason = "The fit score was generated based on the provided job requirements and candidate profile."
+        reason = "The fit score was generated based on the provided job requirements and candidate resume."
 
     return FitScoreResponse(
         fit_score=score,
@@ -319,22 +282,27 @@ def build_fit_score_response(parsed: dict[str, Any]) -> FitScoreResponse:
 
 async def compute_fit_score(
     profile: JobRequirementProfile,
-    candidate: CandidateFitProfile,
+    candidate: ResumeSchema,
+    add_reasoning: bool = True,
 ) -> FitScoreResponse:
     prompt = build_fit_score_prompt(
         profile=profile,
         candidate=candidate,
+        add_reasoning=add_reasoning,
     )
 
-    content = await call_fit_scorer_llm(prompt)
-
-    if not content:
-        raise FitScoreScorerError("LLM returned empty fit score response")
+    content = await call_fit_scorer_llm(
+        prompt=prompt,
+        add_reasoning=add_reasoning,
+    )
 
     parsed = extract_json_from_text(content)
 
     try:
-        return build_fit_score_response(parsed)
+        return build_fit_score_response(
+            parsed=parsed,
+            add_reasoning=add_reasoning,
+        )
 
     except ValidationError as e:
         raise FitScoreScorerError(
