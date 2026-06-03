@@ -1,10 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.modules.jobs.providers.jsearch import JSearchError
-from app.schemas import JobSearchRequest, JobSearchResponse
-from app.modules.jobs.service import search_live_jobs
+from app.schemas import (
+    JobDetailResponse,
+    JobSearchRequest,
+    JobSearchResponse,
+)
+from app.modules.jobs.controller import get_job_detail, search_live_jobs
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
+
 
 @router.post("/live-search", response_model=JobSearchResponse)
 async def live_search_jobs(request: JobSearchRequest):
@@ -14,12 +19,27 @@ async def live_search_jobs(request: JobSearchRequest):
             location=request.location,
             page=request.page,
             num_pages=request.num_pages,
+            country=request.country,
+            date_posted=request.date_posted,
         )
 
         return JobSearchResponse(
             query=request.query,
             total=len(jobs),
             jobs=jobs,
+        )
+
+    except JSearchError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/details/{job_id}", response_model=JobDetailResponse)
+async def read_job_detail(
+    job_id: str,
+):
+    try:
+        return await get_job_detail(
+            job_id=job_id
         )
 
     except JSearchError as e:
