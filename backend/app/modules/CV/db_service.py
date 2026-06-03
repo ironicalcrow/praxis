@@ -2,7 +2,6 @@ from fastapi import HTTPException
 from app.core.supabase import supabase_admin
 from app.schemas import ResumeSchema
 
-
 def save_resume_to_db(parsed_resume: ResumeSchema, user_id: str):
     try:
         resume_data = {
@@ -174,4 +173,98 @@ def insert_resume_children(parsed_resume: ResumeSchema, resume_id: str):
             .table("resume_certifications")
             .insert(certifications_data)
             .execute()
+        )
+
+
+def fetch_resume_from_db(user_id: str):
+    try:
+        resume_response = (
+            supabase_admin
+            .table("resumes")
+            .select("*")
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+
+        if not resume_response.data:
+            raise HTTPException(
+                status_code=404,
+                detail="No CV found for this user"
+            )
+
+        resume = resume_response.data
+        resume_id = resume["id"]
+
+        skills_response = (
+            supabase_admin
+            .table("resume_skills")
+            .select("skill")
+            .eq("resume_id", resume_id)
+            .execute()
+        )
+
+        education_response = (
+            supabase_admin
+            .table("resume_education")
+            .select("degree, institution, year, gpa")
+            .eq("resume_id", resume_id)
+            .execute()
+        )
+
+        experience_response = (
+            supabase_admin
+            .table("resume_experience")
+            .select("role, organization, description")
+            .eq("resume_id", resume_id)
+            .execute()
+        )
+
+        projects_response = (
+            supabase_admin
+            .table("resume_projects")
+            .select("name, description, technology")
+            .eq("resume_id", resume_id)
+            .execute()
+        )
+
+        certifications_response = (
+            supabase_admin
+            .table("resume_certifications")
+            .select("certification")
+            .eq("resume_id", resume_id)
+            .execute()
+        )
+
+        return {
+            "id": resume["id"],
+            "user_id": resume["user_id"],
+            "name": resume["name"],
+            "email": resume["email"],
+            "phone": resume["phone"],
+            "location": resume["location"],
+            "years_of_experience": resume["years_of_experience"],
+            "raw_text": resume["raw_text"],
+            "skills": [
+                item["skill"]
+                for item in skills_response.data
+            ],
+            "education": education_response.data,
+            "experience": experience_response.data,
+            "projects": projects_response.data,
+            "certifications": [
+                item["certification"]
+                for item in certifications_response.data
+            ],
+            "created_at": resume["created_at"],
+            "updated_at": resume["updated_at"],
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch resume: {str(e)}"
         )
