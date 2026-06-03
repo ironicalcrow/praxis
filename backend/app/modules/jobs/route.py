@@ -6,7 +6,7 @@ from app.schemas import (
     JobSearchRequest,
     JobSearchResponse,
 )
-from app.modules.jobs.service import get_job_detail, search_live_jobs
+from app.modules.jobs.controller import get_job_detail, search_live_jobs
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
@@ -36,12 +36,10 @@ async def live_search_jobs(request: JobSearchRequest):
 @router.get("/details/{job_id}", response_model=JobDetailResponse)
 async def read_job_detail(
     job_id: str,
-    country: str = Query(default="us"),
 ):
     try:
         return await get_job_detail(
-            job_id=job_id,
-            country=country,
+            job_id=job_id
         )
 
     except JSearchError as e:

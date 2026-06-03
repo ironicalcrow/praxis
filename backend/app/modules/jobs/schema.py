@@ -1,7 +1,6 @@
 from typing import Any, Optional
 
-from pydantic import BaseModel, PrivateAttr
-
+from pydantic import BaseModel, PrivateAttr,Field
 
 class JobSearchRequest(BaseModel):
     query: str
@@ -148,6 +147,35 @@ class JobDetailResponse(BaseModel):
     def get_raw_payload(self) -> Optional[dict[str, Any]]:
         return self._raw_payload
 
+class JobRequirementProfile(BaseModel):
+    summary: str | None = None
+
+    description: str | None = None
+
+    required_skills: list[str] = Field(default_factory=list)
+    preferred_skills: list[str] = Field(default_factory=list)
+
+    tools_and_technologies: list[str] = Field(default_factory=list)
+    methodologies: list[str] = Field(default_factory=list)
+    soft_skills: list[str] = Field(default_factory=list)
+
+    responsibilities: list[str] = Field(default_factory=list)
+    qualifications: list[str] = Field(default_factory=list)
+    benefits: list[str] = Field(default_factory=list)
+
+    required_experience_years: float | None = None
+    seniority_level: str | None = None
+
+    job_function: str | None = None
+    industry: str | None = None
+    work_arrangement: str | None = None
+
+    education_requirements: list[str] = Field(default_factory=list)
+    important_context: list[str] = Field(default_factory=list)
+
+class JobRequirementProfileResponse(BaseModel):
+    job_id: str
+    profile: JobRequirementProfile
 
 class JobSearchResponse(BaseModel):
     query: str

@@ -8,7 +8,17 @@ from app.modules.jobs.schema import (
     JobSearchResponse,
     RequiredExperience,
     SalaryInfo,
+    JobRequirementProfile,
+    JobRequirementProfileResponse
 )
+
+from app.modules.fit_score.schema import(
+    CandidateFitProfile,
+    FitScoreResponse,
+    FitScoreRequest,
+    JobDetailWithFitResponse,
+)
+
 
 __all__ = (
     "ApplyOption",
@@ -20,4 +30,10 @@ __all__ = (
     "JobSearchResponse",
     "RequiredExperience",
     "SalaryInfo",
+    "CandidateFitProfile",
+    "FitScoreResponse",
+    "FitScoreRequest",
+    "JobDetailWithFitResponse",
+    "JobRequirementProfile",
+    "JobRequirementProfileResponse",
 )

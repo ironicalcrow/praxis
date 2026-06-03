@@ -278,7 +278,6 @@ async def search_jsearch_jobs(
 
 async def get_jsearch_job_detail(
     job_id: str,
-    country: str = "us",
 ) -> JobDetailResponse:
     if not settings.JSEARCH_API_KEY:
         raise JSearchError("JSEARCH_API_KEY is missing in .env")
@@ -292,7 +291,6 @@ async def get_jsearch_job_detail(
 
     params = {
         "job_id": job_id,
-        "country": country,
     }
 
     try:

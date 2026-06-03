@@ -27,9 +27,12 @@ async def search_live_jobs(
 
 async def get_job_detail(
     job_id: str,
-    country: str = "us",
-) -> JobDetailResponse:
-    return await get_jsearch_job_detail(
+) -> JobDetailResponse | None:
+    job = await get_jsearch_job_detail(
         job_id=job_id,
-        country=country,
     )
+
+    if not job:
+        return None
+
+    return job
