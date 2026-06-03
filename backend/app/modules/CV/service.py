@@ -1,7 +1,8 @@
 import json
 import os
 from openai import OpenAI
-from app.schemas import ResumeSchema
+from app.modules.CV.schemas import ResumeSchema
+
 import re
 client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
