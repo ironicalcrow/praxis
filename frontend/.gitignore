@@ -26,12 +26,3 @@ dist-ssr
 # Environment files
 .env
 .env.*
-backend/.env
-backend/.env.*
-frontend/.env
-frontend/.env.*
-
-# Keep safe example env files
-!.env.example
-!backend/.env.example
-!frontend/.env.example
