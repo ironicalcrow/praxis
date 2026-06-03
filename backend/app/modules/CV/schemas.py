@@ -18,6 +18,7 @@ class Experience(BaseModel):
 class Project(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    technology: Optional[str] = None
 
 
 class ResumeSchema(BaseModel):
