@@ -1,11 +1,21 @@
-import os
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
 
-class Settings:
-    JSEARCH_API_KEY:str=os.getenv("JSEARCH_API_KEY")
-    JSEARCH_API_HOST:str=os.getenv("JSEARCH_API_HOST")
-    jsearch_URL:str=os.getenv("jsearch_URL")
+class Settings(BaseSettings):
+    OPENROUTER_API_KEY: str
 
-settings=Settings()
+    JSEARCH_API_KEY: str
+    JSEARCH_API_HOST: str
+    JSEARCH_URL: str
+
+    SUPABASE_URL: str
+    SUPABASE_ANON_KEY: str
+    SUPABASE_SERVICE_ROLE_KEY: str
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore"
+    )
+
+
+settings = Settings()
