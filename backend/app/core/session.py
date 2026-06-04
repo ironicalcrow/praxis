@@ -3,7 +3,10 @@ Database session and engine configuration.
 Handles SQLAlchemy engine creation and session management.
 """
 
+import socket
+
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker, Session
 from app.core.config import settings
 
@@ -21,7 +24,30 @@ def _validate_database_url(url: str) -> str:
             "DATABASE_URL contains a placeholder password. "
             "Replace [YOUR-PASSWORD] with the actual Supabase database password."
         )
-    return url.strip()
+    database_url = url.strip()
+    try:
+        parsed_url = make_url(database_url)
+    except Exception as exc:
+        raise RuntimeError("DATABASE_URL is not a valid SQLAlchemy database URL.") from exc
+
+    if not parsed_url.host:
+        raise RuntimeError("DATABASE_URL must include a database host.")
+
+    try:
+        socket.getaddrinfo(parsed_url.host, parsed_url.port)
+    except socket.gaierror as exc:
+        hint = ""
+        if parsed_url.host.startswith("db.") and parsed_url.host.endswith(".supabase.co"):
+            hint = (
+                " Supabase direct database hosts use IPv6 unless the project has the "
+                "IPv4 add-on. If your network is IPv4-only, replace DATABASE_URL with "
+                "the Session pooler connection string from Supabase Dashboard > Connect."
+            )
+        raise RuntimeError(
+            f"Could not resolve database host '{parsed_url.host}'.{hint}"
+        ) from exc
+
+    return database_url
 
 
 def init_engine() -> any:

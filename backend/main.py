@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
+from app.core.session import get_engine
+from app.models import Base, User, Resume, ResumeSkill, ResumeEducation, ResumeExperience, ResumeProject, ResumeCertification
 
 app = FastAPI(title="PRAXIS")
 
