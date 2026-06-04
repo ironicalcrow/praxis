@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { uploadCv } from "../api/cv";
 import type { ResumeData } from "../types/cv";
+import { Upload } from "lucide-react";
 
 export default function CvUploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -60,24 +61,24 @@ export default function CvUploadPage() {
       <section className="grid gap-7 xl:grid-cols-[0.85fr_1.15fr]">
         <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
           <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-indigo-600 text-4xl text-white">
-              ⬆
-            </div>
-
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-500 shadow-md">
+  <Upload className="h-10 w-10 text-white" strokeWidth={2.2} />
+</div>
             <h2 className="mt-6 text-2xl font-bold">Upload your CV</h2>
             <p className="mx-auto mt-3 max-w-sm text-slate-500">
               PDF, DOCX, PNG, JPG, or JPEG. Your CV becomes the source of truth for CareerPilot.
             </p>
 
-            <label className="mt-7 inline-flex cursor-pointer rounded-2xl bg-indigo-600 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-indigo-500">
-              Choose file
-              <input
-                type="file"
-                accept=".pdf,.docx,.png,.jpg,.jpeg"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-            </label>
+            <label className="mt-7 inline-flex cursor-pointer items-center gap-3 rounded-2xl bg-indigo-600 px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-indigo-500">
+  <Upload className="h-5 w-5" strokeWidth={2.4} />
+  Choose file
+  <input
+    type="file"
+    accept=".pdf,.docx,.png,.jpg,.jpeg"
+    className="hidden"
+    onChange={handleFileChange}
+  />
+</label>
           </div>
 
           {selectedFile && (

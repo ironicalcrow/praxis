@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { searchLiveJobs } from "../api/jobs";
 import type { JobCardType, JobSearchRequest } from "../types/jobs";
+import { Sparkles } from "lucide-react";
 
 export default function JobSearchPage() {
   const [query, setQuery] = useState("Machine Learning Internship");
@@ -46,33 +47,34 @@ export default function JobSearchPage() {
       </section>
 
       <form
-        onSubmit={handleSearch}
-        className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-      >
-        <div className="grid gap-4 md:grid-cols-[1.4fr_1fr_auto]">
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 outline-none focus:border-indigo-300 focus:bg-white"
-            placeholder="Machine Learning Internship"
-          />
+  onSubmit={handleSearch}
+  className="rounded-[32px] border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/80"
+>
+  <div className="grid items-center gap-4 md:grid-cols-[1.4fr_1fr_auto]">
+    <input
+      value={query}
+      onChange={(event) => setQuery(event.target.value)}
+      className="rounded-[24px] border border-transparent bg-white px-5 py-4 text-lg outline-none focus:border-indigo-200 focus:bg-slate-50"
+      placeholder="Machine Learning Internship"
+    />
 
-          <input
-            value={location}
-            onChange={(event) => setLocation(event.target.value)}
-            className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 outline-none focus:border-indigo-300 focus:bg-white"
-            placeholder="Dhaka"
-          />
+    <input
+      value={location}
+      onChange={(event) => setLocation(event.target.value)}
+      className="rounded-[24px] border border-transparent bg-white px-5 py-4 text-lg outline-none focus:border-indigo-200 focus:bg-slate-50"
+      placeholder="Dhaka"
+    />
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="rounded-2xl bg-indigo-600 px-8 py-4 font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:bg-slate-300"
-          >
-            {isLoading ? "Searching..." : "Hunt"}
-          </button>
-        </div>
-      </form>
+    <button
+      type="submit"
+      disabled={isLoading}
+      className="inline-flex items-center justify-center gap-3 rounded-[30px] bg-gradient-to-r from-blue-600 to-violet-500 px-9 py-4 text-lg font-semibold text-white shadow-md shadow-indigo-200 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <Sparkles className="h-6 w-6" strokeWidth={2.4} />
+      {isLoading ? "Hunting..." : "Hunt"}
+    </button>
+  </div>
+</form>
 
       {errorMessage && (
         <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
