@@ -230,13 +230,13 @@ async def search_jsearch_jobs(
     location: Optional[str] = None,
     page: int = 1,
     num_pages: int = 1,
-    country: str = "us",
+    country: str = "bd",
     date_posted: str = "all",
 ) -> list[JobCard]:
     if not settings.JSEARCH_API_KEY:
         raise JSearchError("JSEARCH_API_KEY is missing in .env")
 
-    url = settings.jsearch_URL
+    url = settings.JSEARCH_URL
 
     headers = {
         "X-RapidAPI-Key": settings.JSEARCH_API_KEY,
@@ -282,7 +282,7 @@ async def get_jsearch_job_detail(
     if not settings.JSEARCH_API_KEY:
         raise JSearchError("JSEARCH_API_KEY is missing in .env")
 
-    url = settings.jsearch_detail_URL
+    url = settings.JSEARCH_DETAIL_URL
 
     headers = {
         "X-RapidAPI-Key": settings.JSEARCH_API_KEY,

@@ -7,7 +7,7 @@ class JobSearchRequest(BaseModel):
     location: Optional[str] = None
     page: int = 1
     num_pages: int = 1
-    country: str = "us"
+    country: str = "bd"
     date_posted: str = "all"
 
 
@@ -181,3 +181,12 @@ class JobSearchResponse(BaseModel):
     query: str
     total: int
     jobs: list[JobCard]
+
+class JobSuggestionRequest(BaseModel):
+    queries: list[str]
+    location: Optional[str] = None
+    country: str = "bd"
+    page: int = 1
+    num_pages: int = 1
+    max_jobs_per_query: int = 10
+    max_total_jobs: int = 30

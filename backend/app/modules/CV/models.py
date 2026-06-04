@@ -1,0 +1,93 @@
+from datetime import datetime
+
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
+
+from app.core.session import Base
+
+
+class Resume(Base):
+    __tablename__ = "resumes"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True)
+
+    name = Column(String(255))
+    email = Column(String(255))
+    phone = Column(String(20))
+    location = Column(String(255))
+    years_of_experience = Column(Integer)
+    raw_text = Column(Text)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="resumes")
+
+    skills = relationship("ResumeSkill", back_populates="resume", cascade="all, delete-orphan")
+    education = relationship("ResumeEducation", back_populates="resume", cascade="all, delete-orphan")
+    experience = relationship("ResumeExperience", back_populates="resume", cascade="all, delete-orphan")
+    projects = relationship("ResumeProject", back_populates="resume", cascade="all, delete-orphan")
+    certifications = relationship("ResumeCertification", back_populates="resume", cascade="all, delete-orphan")
+
+
+class ResumeSkill(Base):
+    __tablename__ = "resume_skills"
+
+    id = Column(String, primary_key=True)
+    resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
+    skill = Column(String(255), nullable=False)
+
+    resume = relationship("Resume", back_populates="skills")
+
+
+class ResumeEducation(Base):
+    __tablename__ = "resume_education"
+
+    id = Column(String, primary_key=True)
+    resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
+
+    degree = Column(String(255))
+    institution = Column(String(255))
+    year = Column(String(20))
+    gpa = Column(String(10))
+
+    resume = relationship("Resume", back_populates="education")
+
+
+class ResumeExperience(Base):
+    __tablename__ = "resume_experience"
+
+    id = Column(String, primary_key=True)
+    resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
+
+    role = Column(String(255))
+    organization = Column(String(255))
+    description = Column(Text)
+
+    resume = relationship("Resume", back_populates="experience")
+
+
+class ResumeProject(Base):
+    __tablename__ = "resume_projects"
+
+    id = Column(String, primary_key=True)
+    resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
+
+    name = Column(String(255))
+    description = Column(Text)
+    technology = Column(String(255))
+
+    resume = relationship("Resume", back_populates="projects")
+
+
+class ResumeCertification(Base):
+    __tablename__ = "resume_certifications"
+
+    id = Column(String, primary_key=True)
+    resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
+
+    certification = Column(String(255), nullable=False)
+
+    resume = relationship("Resume", back_populates="certifications")
