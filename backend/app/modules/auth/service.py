@@ -1,5 +1,7 @@
 from fastapi import HTTPException
-from app.core.supabase import supabase, supabase_admin
+from app.core.supabase import supabase
+from app.core.session import get_session
+from app.models import User
 from app.modules.auth.schemas import RegisterRequest, LoginRequest, AuthResponse
 
 
@@ -7,21 +9,24 @@ class AuthService:
 
     @staticmethod
     def register_user(payload: RegisterRequest) -> AuthResponse:
+        db = get_session()
         try:
-            existing_username = (
-                supabase_admin
-                .table("users")
-                .select("id")
-                .eq("username", payload.username)
-                .execute()
-            )
-
-            if existing_username.data:
+            # Check if username already exists
+            existing_user = db.query(User).filter(User.username == payload.username).first()
+            if existing_user:
                 raise HTTPException(
                     status_code=400,
                     detail="Username already exists"
                 )
+            
+            existing_user = db.query(User).filter(User.email == payload.email).first()
+            if existing_user:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email already exists"
+                )
 
+            # Sign up with Supabase auth
             auth_response = supabase.auth.sign_up({
                 "email": payload.email,
                 "password": payload.password,
@@ -41,12 +46,15 @@ class AuthService:
 
             user_id = auth_response.user.id
 
-            supabase_admin.table("users").insert({
-                "id": user_id,
-                "name": payload.name,
-                "username": payload.username,
-                "email": payload.email,
-            }).execute()
+            # Store user in database
+            new_user = User(
+                id=user_id,
+                name=payload.name,
+                username=payload.username,
+                email=payload.email,
+            )
+            db.add(new_user)
+            db.commit()
 
             session = auth_response.session
 
@@ -62,10 +70,14 @@ class AuthService:
             )
 
         except HTTPException:
+            db.rollback()
             raise
 
         except Exception as e:
+            db.rollback()
             raise HTTPException(status_code=400, detail=str(e))
+        finally:
+            db.close()
 
     @staticmethod
     def login_user(payload: LoginRequest) -> AuthResponse:
@@ -103,26 +115,29 @@ class AuthService:
 
     @staticmethod
     def get_user_profile(user_id: str):
+        db = get_session()
         try:
-            user_data = (
-                supabase_admin
-                .table("users")
-                .select("id, name, username, email")
-                .eq("id", user_id)
-                .single()
-                .execute()
-            )
+            user = db.query(User).filter(User.id == user_id).first()
 
-            if not user_data.data:
+            if not user:
                 raise HTTPException(
                     status_code=404,
                     detail="User profile not found"
                 )
 
-            return user_data.data
+            return {
+                "id": user.id,
+                "name": user.name,
+                "username": user.username,
+                "email": user.email,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+            }
 
         except HTTPException:
             raise
 
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
+        finally:
+            db.close()

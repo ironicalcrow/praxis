@@ -5,6 +5,12 @@ from app.api import api_router
 app = FastAPI(title="PRAXIS")
 
 
+@app.on_event("startup")
+def on_startup():
+    engine = get_engine()
+    Base.metadata.create_all(bind=engine)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,6 +21,7 @@ app.add_middleware(
 
 app.include_router(api_router)
 
+
 @app.get("/")
 def root():
-    return{"message":"Praxis server is running"}
+    return {"message": "Praxis server is running"}
