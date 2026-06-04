@@ -1,21 +1,18 @@
-from sqlalchemy import Column, String, Integer, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
-from app.models import Base
-
-
-class JobQuery(Base):
-    __tablename__ = "job_queries"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True)
-    resume_id = Column(UUID(as_uuid=True), ForeignKey("resumes.id"), nullable=False)
-    query = Column(String(255), nullable=False)
-    reason = Column(String(500))
-    priority = Column(Integer)
-
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Text, DateTime, Boolean, JSON
+from sqlalchemy import (
+    Column,
+    String,
+    Text,
+    DateTime,
+    Boolean,
+    JSON,
+    ForeignKey,
+    Float,
+    Integer,
+)
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.core.session import Base
@@ -23,6 +20,20 @@ from app.core.session import Base
 
 def generate_uuid():
     return str(uuid.uuid4())
+
+
+class JobQuery(Base):
+    __tablename__ = "job_queries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    # FIXED:
+    # Resume.id is String, so resume_id must also be String.
+    resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
+
+    query = Column(String(255), nullable=False)
+    reason = Column(String(500))
+    priority = Column(Integer)
 
 
 class Job(Base):
@@ -64,7 +75,12 @@ class Job(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     applications = relationship("Application", back_populates="job")
-    fit_scores = relationship("JobFitScore", back_populates="job", cascade="all, delete-orphan")
+    fit_scores = relationship(
+        "JobFitScore",
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
+
 
 class JobFitScore(Base):
     __tablename__ = "job_fit_scores"

@@ -1,3 +1,4 @@
+
 from app.core.session import Base
 
 from app.modules.auth.models import User
@@ -9,15 +10,13 @@ from app.modules.CV.models import (
     ResumeProject,
     ResumeCertification,
 )
-from app.modules.jobs.models import Job
+from app.modules.jobs.models import Job, JobQuery, JobFitScore
 from app.modules.application.models import (
     Application,
     ApplicationStatus,
     ApplicationStatusHistory,
     ApplicationNote,
 )
-from app.modules.fit_score.models import JobFitScore
-
 
 __all__ = [
     "Base",
@@ -29,9 +28,10 @@ __all__ = [
     "ResumeProject",
     "ResumeCertification",
     "Job",
+    "JobQuery",
+    "JobFitScore",
     "Application",
     "ApplicationStatus",
     "ApplicationStatusHistory",
     "ApplicationNote",
-    "JobFitScore",
 ]
