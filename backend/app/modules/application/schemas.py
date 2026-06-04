@@ -18,6 +18,8 @@ class ApplicationCreationManual(BaseModel):
 class UpdateStatusRequest(BaseModel):
     user_id: str
     status: str
+    reason:Optional[str]=None
+
 class ApplicationNoteRequest(BaseModel):
     user_id:str
     content:str
