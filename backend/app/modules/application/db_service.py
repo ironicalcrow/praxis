@@ -1,10 +1,12 @@
 import uuid
+from uuid import UUID as PyUUID
 from datetime import datetime
+
 from fastapi import HTTPException
 
 from app.core.session import get_session
-from app.models import (
-    Job,
+from app.modules.jobs.models import Job
+from app.modules.application.models import (
     Application,
     ApplicationStatus,
     ApplicationStatusHistory,
@@ -12,7 +14,19 @@ from app.models import (
 )
 
 
-def create_job_to_db(db,job_data: dict):
+def parse_user_uuid(user_id: str):
+    """Convert string user_id into UUID object."""
+    try:
+        return PyUUID(str(user_id))
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid user_id. Expected UUID format.",
+        )
+
+
+def create_job_to_db(db, job_data: dict):
+    """Create or reuse a job from job search result."""
 
     external_id = job_data.get("external_id")
 
@@ -68,12 +82,17 @@ def create_application_to_db(
     location: str | None = None,
     apply_url: str | None = None,
     source: str | None = None,
-    salary: str | None = None,):
+    salary: str | None = None,
+):
+    """Create an application."""
+
+    user_uuid = parse_user_uuid(user_id)
+
     if job_id:
         existing_application = (
             db.query(Application)
             .filter(
-                Application.user_id == user_id,
+                Application.user_id == user_uuid,
                 Application.job_id == job_id,
                 Application.is_archived == False,
             )
@@ -83,14 +102,14 @@ def create_application_to_db(
         if existing_application:
             raise HTTPException(
                 status_code=409,
-                detail="Application already exists for this job"
+                detail="Application already exists for this job",
             )
 
     application_id = str(uuid.uuid4())
 
     new_application = Application(
         id=application_id,
-        user_id=user_id,
+        user_id=user_uuid,
         job_id=job_id,
         job_title=job_title,
         company=company,
@@ -124,15 +143,18 @@ def create_application_status_history_to_db(
     old_status,
     new_status,
     user_id: str,
-    reason: str | None = None,):
+    reason: str | None = None,
+):
+    """Create application status history."""
 
+    user_uuid = parse_user_uuid(user_id)
 
     status_history = ApplicationStatusHistory(
         id=str(uuid.uuid4()),
         application_id=application_id,
         old_status=old_status,
         new_status=new_status,
-        changed_by_user_id=user_id,
+        changed_by_user_id=user_uuid,
         reason=reason,
     )
 
@@ -143,13 +165,14 @@ def create_application_status_history_to_db(
 
 
 def create_application_from_job_db(user_id: str, job_data: dict):
+    """Create job first, then create application from that job."""
 
     db = get_session()
 
     try:
         job = create_job_to_db(
-            job_data=job_data,
             db=db,
+            job_data=job_data,
         )
 
         application = create_application_to_db(
@@ -169,7 +192,7 @@ def create_application_from_job_db(user_id: str, job_data: dict):
         return {
             "application_id": application.id,
             "job_id": job.id,
-            "message": "Application created from job successfully"
+            "message": "Application created from job successfully",
         }
 
     except HTTPException:
@@ -180,7 +203,7 @@ def create_application_from_job_db(user_id: str, job_data: dict):
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to create application from job: {str(e)}"
+            detail=f"Failed to create application from job: {str(e)}",
         )
 
     finally:
@@ -196,6 +219,7 @@ def create_manual_application_db(
     source: str | None = "manual",
     salary: str | None = None,
 ):
+    """Create manual application."""
 
     db = get_session()
 
@@ -216,7 +240,7 @@ def create_manual_application_db(
 
         return {
             "application_id": application.id,
-            "message": "Manual application created successfully"
+            "message": "Manual application created successfully",
         }
 
     except HTTPException:
@@ -227,7 +251,7 @@ def create_manual_application_db(
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to create manual application: {str(e)}"
+            detail=f"Failed to create manual application: {str(e)}",
         )
 
     finally:
@@ -239,11 +263,14 @@ def fetch_applications_from_db(
     status: str | None = None,
     include_archived: bool = False,
 ):
+    """Fetch all applications for a user."""
 
     db = get_session()
 
     try:
-        query = db.query(Application).filter(Application.user_id == user_id)
+        user_uuid = parse_user_uuid(user_id)
+
+        query = db.query(Application).filter(Application.user_id == user_uuid)
 
         if not include_archived:
             query = query.filter(Application.is_archived == False)
@@ -254,7 +281,7 @@ def fetch_applications_from_db(
             except ValueError:
                 raise HTTPException(
                     status_code=400,
-                    detail="Invalid application status"
+                    detail="Invalid application status",
                 )
 
             query = query.filter(Application.status == status_enum)
@@ -272,7 +299,7 @@ def fetch_applications_from_db(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch applications: {str(e)}"
+            detail=f"Failed to fetch applications: {str(e)}",
         )
 
     finally:
@@ -280,14 +307,17 @@ def fetch_applications_from_db(
 
 
 def fetch_kanban_applications_from_db(user_id: str):
+    """Fetch applications grouped by Kanban status."""
 
     db = get_session()
 
     try:
+        user_uuid = parse_user_uuid(user_id)
+
         applications = (
             db.query(Application)
             .filter(
-                Application.user_id == user_id,
+                Application.user_id == user_uuid,
                 Application.is_archived == False,
             )
             .order_by(Application.created_at.desc())
@@ -295,6 +325,7 @@ def fetch_kanban_applications_from_db(user_id: str):
         )
 
         kanban = {
+            "saved": [],
             "applied": [],
             "interviewing": [],
             "offer": [],
@@ -308,10 +339,13 @@ def fetch_kanban_applications_from_db(user_id: str):
 
         return kanban
 
+    except HTTPException:
+        raise
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch kanban applications: {str(e)}"
+            detail=f"Failed to fetch kanban applications: {str(e)}",
         )
 
     finally:
@@ -324,15 +358,18 @@ def update_application_status_db(
     new_status: str,
     reason: str | None = None,
 ):
+    """Update application status and store history."""
 
     db = get_session()
 
     try:
+        user_uuid = parse_user_uuid(user_id)
+
         application = (
             db.query(Application)
             .filter(
                 Application.id == application_id,
-                Application.user_id == user_id,
+                Application.user_id == user_uuid,
             )
             .first()
         )
@@ -340,7 +377,7 @@ def update_application_status_db(
         if not application:
             raise HTTPException(
                 status_code=404,
-                detail="Application not found"
+                detail="Application not found",
             )
 
         try:
@@ -348,7 +385,7 @@ def update_application_status_db(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid application status"
+                detail="Invalid application status",
             )
 
         old_status = application.status
@@ -371,7 +408,7 @@ def update_application_status_db(
             "application_id": application.id,
             "old_status": old_status.value if old_status else None,
             "new_status": new_status_enum.value,
-            "message": "Application status updated successfully"
+            "message": "Application status updated successfully",
         }
 
     except HTTPException:
@@ -382,7 +419,7 @@ def update_application_status_db(
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to update application status: {str(e)}"
+            detail=f"Failed to update application status: {str(e)}",
         )
 
     finally:
@@ -394,15 +431,18 @@ def add_application_note_db(
     application_id: str,
     content: str,
 ):
+    """Add note to application."""
 
     db = get_session()
 
     try:
+        user_uuid = parse_user_uuid(user_id)
+
         application = (
             db.query(Application)
             .filter(
                 Application.id == application_id,
-                Application.user_id == user_id,
+                Application.user_id == user_uuid,
             )
             .first()
         )
@@ -410,7 +450,7 @@ def add_application_note_db(
         if not application:
             raise HTTPException(
                 status_code=404,
-                detail="Application not found"
+                detail="Application not found",
             )
 
         note_id = str(uuid.uuid4())
@@ -418,7 +458,7 @@ def add_application_note_db(
         note = ApplicationNote(
             id=note_id,
             application_id=application_id,
-            user_id=user_id,
+            user_id=user_uuid,
             content=content,
         )
 
@@ -428,7 +468,7 @@ def add_application_note_db(
         return {
             "note_id": note_id,
             "application_id": application_id,
-            "message": "Note added successfully"
+            "message": "Note added successfully",
         }
 
     except HTTPException:
@@ -439,7 +479,7 @@ def add_application_note_db(
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to add application note: {str(e)}"
+            detail=f"Failed to add application note: {str(e)}",
         )
 
     finally:
@@ -451,15 +491,18 @@ def update_application_note_db(
     note_id: str,
     content: str,
 ):
+    """Update application note."""
 
     db = get_session()
 
     try:
+        user_uuid = parse_user_uuid(user_id)
+
         note = (
             db.query(ApplicationNote)
             .filter(
                 ApplicationNote.id == note_id,
-                ApplicationNote.user_id == user_id,
+                ApplicationNote.user_id == user_uuid,
             )
             .first()
         )
@@ -467,7 +510,7 @@ def update_application_note_db(
         if not note:
             raise HTTPException(
                 status_code=404,
-                detail="Note not found"
+                detail="Note not found",
             )
 
         note.content = content
@@ -477,7 +520,7 @@ def update_application_note_db(
         return {
             "note_id": note.id,
             "application_id": note.application_id,
-            "message": "Note updated successfully"
+            "message": "Note updated successfully",
         }
 
     except HTTPException:
@@ -488,7 +531,7 @@ def update_application_note_db(
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to update application note: {str(e)}"
+            detail=f"Failed to update application note: {str(e)}",
         )
 
     finally:
@@ -496,15 +539,18 @@ def update_application_note_db(
 
 
 def archive_application_db(user_id: str, application_id: str):
+    """Archive application."""
 
     db = get_session()
 
     try:
+        user_uuid = parse_user_uuid(user_id)
+
         application = (
             db.query(Application)
             .filter(
                 Application.id == application_id,
-                Application.user_id == user_id,
+                Application.user_id == user_uuid,
             )
             .first()
         )
@@ -512,7 +558,7 @@ def archive_application_db(user_id: str, application_id: str):
         if not application:
             raise HTTPException(
                 status_code=404,
-                detail="Application not found"
+                detail="Application not found",
             )
 
         application.is_archived = True
@@ -521,7 +567,7 @@ def archive_application_db(user_id: str, application_id: str):
 
         return {
             "application_id": application.id,
-            "message": "Application archived successfully"
+            "message": "Application archived successfully",
         }
 
     except HTTPException:
@@ -532,7 +578,7 @@ def archive_application_db(user_id: str, application_id: str):
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to archive application: {str(e)}"
+            detail=f"Failed to archive application: {str(e)}",
         )
 
     finally:
@@ -540,15 +586,18 @@ def archive_application_db(user_id: str, application_id: str):
 
 
 def delete_application_db(user_id: str, application_id: str):
+    """Delete application permanently."""
 
     db = get_session()
 
     try:
+        user_uuid = parse_user_uuid(user_id)
+
         application = (
             db.query(Application)
             .filter(
                 Application.id == application_id,
-                Application.user_id == user_id,
+                Application.user_id == user_uuid,
             )
             .first()
         )
@@ -556,7 +605,7 @@ def delete_application_db(user_id: str, application_id: str):
         if not application:
             raise HTTPException(
                 status_code=404,
-                detail="Application not found"
+                detail="Application not found",
             )
 
         db.delete(application)
@@ -565,7 +614,7 @@ def delete_application_db(user_id: str, application_id: str):
         return {
             "deleted": True,
             "application_id": application_id,
-            "message": "Application deleted successfully"
+            "message": "Application deleted successfully",
         }
 
     except HTTPException:
@@ -576,7 +625,7 @@ def delete_application_db(user_id: str, application_id: str):
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to delete application: {str(e)}"
+            detail=f"Failed to delete application: {str(e)}",
         )
 
     finally:
@@ -584,6 +633,7 @@ def delete_application_db(user_id: str, application_id: str):
 
 
 def serialize_application_from_db(db, application: Application):
+    """Serialize application with notes and status history."""
 
     notes = (
         db.query(ApplicationNote)
@@ -601,7 +651,7 @@ def serialize_application_from_db(db, application: Application):
 
     return {
         "id": application.id,
-        "user_id": application.user_id,
+        "user_id": str(application.user_id),
         "job_id": application.job_id,
         "job_title": application.job_title,
         "company": application.company,
@@ -632,6 +682,9 @@ def serialize_application_from_db(db, application: Application):
                 "new_status": history.new_status.value,
                 "reason": history.reason,
                 "changed_at": history.changed_at.isoformat() if history.changed_at else None,
+                "changed_by_user_id": str(history.changed_by_user_id)
+                if history.changed_by_user_id
+                else None,
             }
             for history in status_history
         ],
