@@ -52,6 +52,27 @@ async def get_or_generate_resume_job_queries(
         db.close()
 
 
+def delete_job_queries(resume_id: str) -> None:
+    db = get_session()
+    try:
+        rid = uuid.UUID(resume_id) if isinstance(resume_id, str) else resume_id
+        db.query(JobQuery).filter(JobQuery.resume_id == rid).delete()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+async def refresh_resume_job_queries(
+    resume_id: str,
+    resume: ResumeSchema,
+    limit: int = 5,
+) -> list[str]:
+    delete_job_queries(resume_id)
+    return await get_or_generate_resume_job_queries(resume_id, resume, limit)
+
 
 class ResumeQueryGeneratorError(Exception):
     pass
@@ -60,26 +81,6 @@ class ResumeQueryGeneratorError(Exception):
 DEFAULT_QUERY_LIMIT = 5
 
 
-BACKEND_SKILLS = {
-    "fastapi", "django", "flask", "express", "node", "node.js", "nestjs",
-    "spring", "spring boot", "laravel", "postgres", "postgresql", "mysql",
-    "mongodb", "redis", "sqlalchemy", "rest", "api", "graphql",
-}
-
-FRONTEND_SKILLS = {
-    "react", "next", "next.js", "vue", "angular", "javascript", "typescript",
-    "html", "css", "tailwind", "bootstrap", "frontend",
-}
-
-AI_ML_SKILLS = {
-    "machine learning", "ml", "ai", "artificial intelligence", "deep learning",
-    "pytorch", "tensorflow", "scikit", "scikit-learn", "computer vision",
-    "nlp", "transformer", "llm", "yolo", "opencv", "pandas", "numpy",
-}
-
-DEVOPS_SKILLS = {
-    "docker", "kubernetes", "aws", "gcp", "azure", "ci/cd", "linux",
-}
 
 
 def _safe_list(value: Any) -> list[Any]:
@@ -222,81 +223,6 @@ Resume context:
 {json.dumps(context, ensure_ascii=False)}
 """.strip()
 
-
-def generate_fallback_queries(
-    resume: ResumeSchema,
-    limit: int = DEFAULT_QUERY_LIMIT,
-) -> list[dict[str, Any]]:
-    evidence = " ".join(
-        [
-            " ".join(resume.skills or []),
-            " ".join(resume.certifications or []),
-            " ".join(
-                " ".join(
-                    [
-                        project.name or "",
-                        project.description or "",
-                        project.technology or "",
-                    ]
-                )
-                for project in resume.projects
-            ),
-            " ".join(
-                " ".join([exp.role or "", exp.description or ""])
-                for exp in resume.experience
-            ),
-        ]
-    ).lower()
-
-    selected: list[tuple[str, str]] = []
-
-    has_backend = any(skill in evidence for skill in BACKEND_SKILLS)
-    has_frontend = any(skill in evidence for skill in FRONTEND_SKILLS)
-    has_ai_ml = any(skill in evidence for skill in AI_ML_SKILLS)
-    has_devops = any(skill in evidence for skill in DEVOPS_SKILLS)
-
-    if has_backend and has_frontend:
-        selected.append(("full stack developer", "Both backend and frontend evidence found"))
-
-    if has_backend:
-        selected.append(("backend developer", "Backend/API/database evidence found"))
-
-    if has_frontend:
-        selected.append(("frontend developer", "Frontend/UI evidence found"))
-
-    if has_ai_ml:
-        selected.append(("ml engineer", "AI/ML evidence found"))
-        selected.append(("machine learning intern", "AI/ML evidence with student/intern-friendly role"))
-
-    if has_devops:
-        selected.append(("devops engineer", "DevOps/deployment evidence found"))
-
-    if not selected:
-        selected.append(("junior software engineer", "General software profile"))
-
-    result = []
-    seen = set()
-
-    for query, reason in selected:
-        if query in seen:
-            continue
-
-        seen.add(query)
-
-        result.append(
-            {
-                "query": query,
-                "reason": reason,
-                "priority": len(result) + 1,
-            }
-        )
-
-        if len(result) >= limit:
-            break
-
-    return result
-
-
 async def generate_resume_job_queries(
     resume: ResumeSchema,
     limit: int = DEFAULT_QUERY_LIMIT,
@@ -328,7 +254,7 @@ async def generate_resume_job_queries(
         if queries:
             return queries
 
-    except (LLMCallerError, ResumeQueryGeneratorError, json.JSONDecodeError, ValueError):
-        pass
+    except (LLMCallerError, ResumeQueryGeneratorError, json.JSONDecodeError, ValueError) as e:
+        raise ResumeQueryGeneratorError(f"Failed to generate queries: {e}") from e
 
-    return generate_fallback_queries(resume=resume, limit=limit)
+    raise ResumeQueryGeneratorError("Failed to generate queries: no valid queries returned")
