@@ -3,11 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.modules.auth.dependency import get_current_user
 from app.modules.CV.db_service import fetch_resume_from_db
 from app.modules.CV.schemas import ResumeSchema
+from app.modules.fit_score.service import calculate_job_fit_score
 from app.modules.jobs.controller import get_job_detail, search_live_jobs
 from app.modules.jobs.providers.jsearch import JSearchError
+from app.modules.jobs.services.job_profile_extreactor import JobProfileExtractorError
 from app.modules.jobs.services.job_suggestion import build_job_pool_from_queries
 from app.schemas import (
     JobDetailResponse,
+    JobDetailWithFitResponse,
     JobSearchRequest,
     JobSearchResponse,
 )
@@ -44,6 +47,24 @@ async def read_job_detail(job_id: str):
         return await get_job_detail(job_id=job_id)
 
     except JSearchError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/details/{job_id}/fit-score", response_model=JobDetailWithFitResponse)
+async def read_job_detail_with_fit_score(
+    job_id: str,
+    current_user=Depends(get_current_user),
+):
+    try:
+        return await calculate_job_fit_score(
+            job_id=job_id,
+            current_user=current_user,
+        )
+
+    except JSearchError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except JobProfileExtractorError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
