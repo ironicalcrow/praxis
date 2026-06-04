@@ -3,6 +3,7 @@ import AppLayout from "./components/AppLayout";
 import CvUploadPage from "./pages/CvUploadPage";
 import DashboardPage from "./pages/DashboardPage";
 import JobSearchPage from "./pages/JobSearchPage";
+import LandingPage from "./pages/LandingPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -24,8 +25,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
+
         <Route element={<AppLayout />}>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/jobs" element={<JobSearchPage />} />
           <Route path="/cv" element={<CvUploadPage />} />
           <Route path="/assistant" element={<PlaceholderPage title="AI Assistant" />} />

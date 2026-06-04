@@ -1,36 +1,46 @@
 import { NavLink, Outlet } from "react-router-dom";
+import {
+  LayoutDashboard,
+  BriefcaseBusiness,
+  FileText,
+  MessageSquare,
+  CalendarDays,
+  Goal,
+  Settings,
+  Bell,
+} from "lucide-react";
 import careerPilotLogo from "../assets/CareerPilot Logo.png";
 
 const navItems = [
   {
     label: "Dashboard",
-    href: "/",
-    icon: "▦",
+    href: "/dashboard",
+    icon: LayoutDashboard,
   },
   {
     label: "Job Hunter",
     href: "/jobs",
-    icon: "▣",
+    icon: BriefcaseBusiness,
   },
   {
     label: "My CV",
     href: "/cv",
-    icon: "▤",
+    icon: FileText,
   },
   {
     label: "AI Assistant",
     href: "/assistant",
-    icon: "□",
+    icon: MessageSquare,
   },
   {
     label: "Calendar",
     href: "/calendar",
-    icon: "◷",
+    icon: CalendarDays,
   },
   {
     label: "Goals",
     href: "/goals",
-    icon: "◎",
+    icon: Goal,
   },
 ];
 
@@ -38,39 +48,47 @@ export default function AppLayout() {
   return (
     <div className="flex h-screen overflow-hidden bg-[#f5f8ff] text-slate-950">
       <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white px-2 py-4 lg:flex lg:flex-col">
-        <div className="mb-10">
-  <img
-    src={careerPilotLogo}
-    alt="CareerPilot logo"
-    className="h-40 w-auto object-contain"
-  />
-</div>
-        <nav className="flex flex-1 flex-col gap-2">
+        <div className="mb-4 h-28 overflow-hidden">
+          <img
+            src={careerPilotLogo}
+            alt="CareerPilot logo"
+            className="h-36 w-auto -translate-y-4 object-contain"
+          />
+        </div>
+
+        <nav className="flex flex-1 flex-col items-center gap-3">
           {navItems.map((item) => (
             <NavLink
               key={item.href}
               to={item.href}
               className={({ isActive }) =>
                 [
-                  "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition",
+                  "flex w-[230px] items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-semibold transition",
                   isActive
                     ? "bg-indigo-50 text-indigo-600"
                     : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
                 ].join(" ")
               }
             >
-              <span className="text-lg">{item.icon}</span>
-              {item.label}
+              <item.icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
 
         <NavLink
           to="/settings"
-          className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+          className={({ isActive }) =>
+            [
+              "mx-auto flex w-[230px] items-center gap-3 rounded-2xl px-3.5 py-2.5 text-sm font-semibold transition",
+              isActive
+                ? "bg-indigo-50 text-indigo-600"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+            ].join(" ")
+          }
         >
-          <span className="text-lg">⚙</span>
-          Settings
+          <Settings className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+          <span>Settings</span>
         </NavLink>
       </aside>
 
@@ -86,9 +104,9 @@ export default function AppLayout() {
           <div className="flex items-center gap-4">
             <button
               type="button"
-              className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl shadow-sm"
+              className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm"
             >
-              🔔
+              <Bell className="h-5 w-5 text-slate-500" strokeWidth={2.2} />
             </button>
 
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 font-bold text-white shadow-sm">
