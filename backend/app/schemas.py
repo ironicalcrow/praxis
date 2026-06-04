@@ -31,8 +31,6 @@ __all__ = (
     "JobSearchRequest",
     "JobSearchResponse",
     "ResumeSchema",
-)
-
     "RequiredExperience",
     "SalaryInfo",
     "CandidateFitProfile",

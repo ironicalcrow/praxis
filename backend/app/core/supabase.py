@@ -1,6 +1,6 @@
 from supabase import create_client, Client
 from app.core.config import settings
-from app.core.session import engine, SessionLocal, get_db, get_session
+from app.core.session import get_db, get_session
 
 # Supabase REST API clients
 supabase: Client = create_client(

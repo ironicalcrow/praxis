@@ -18,6 +18,13 @@ class AuthService:
                     status_code=400,
                     detail="Username already exists"
                 )
+            
+            existing_user = db.query(User).filter(User.email == payload.email).first()
+            if existing_user:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email already exists"
+                )
 
             # Sign up with Supabase auth
             auth_response = supabase.auth.sign_up({

@@ -1,3 +1,6 @@
+from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -40,8 +43,8 @@ class ResumeSchema(BaseModel):
 
 
 class ResumeResponse(BaseModel):
-    id: str
-    user_id: str
+    id: UUID
+    user_id: UUID
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -53,12 +56,15 @@ class ResumeResponse(BaseModel):
     experience: List[Experience] = Field(default_factory=list)
     projects: List[Project] = Field(default_factory=list)
     certifications: List[str] = Field(default_factory=list)
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
 
 
 class UploadCVResponse(BaseModel):
     success: bool
     message: str
-    resume_id: str
+    resume_id: UUID
     data: ResumeSchema

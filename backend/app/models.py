@@ -32,7 +32,7 @@ class Resume(Base):
     __tablename__ = "resumes"
     
     id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
     name = Column(String(255))
     email = Column(String(255))
     phone = Column(String(20))
@@ -59,8 +59,7 @@ class ResumeSkill(Base):
     
     id = Column(String, primary_key=True)
     resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
-    skill = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    skill = Column(String(255), nullable=False)
     
     resume = relationship("Resume", back_populates="skills")
     
@@ -78,7 +77,6 @@ class ResumeEducation(Base):
     institution = Column(String(255))
     year = Column(String(20))
     gpa = Column(String(10))
-    created_at = Column(DateTime, default=datetime.utcnow)
     
     resume = relationship("Resume", back_populates="education")
     
@@ -95,7 +93,6 @@ class ResumeExperience(Base):
     role = Column(String(255))
     organization = Column(String(255))
     description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
     
     resume = relationship("Resume", back_populates="experience")
     
@@ -112,7 +109,6 @@ class ResumeProject(Base):
     name = Column(String(255))
     description = Column(Text)
     technology = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow)
     
     resume = relationship("Resume", back_populates="projects")
     
@@ -126,8 +122,7 @@ class ResumeCertification(Base):
     
     id = Column(String, primary_key=True)
     resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
-    certification = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    certification = Column(String(255), nullable=False)
     
     resume = relationship("Resume", back_populates="certifications")
     
