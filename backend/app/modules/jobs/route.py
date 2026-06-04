@@ -3,18 +3,23 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.modules.auth.dependency import get_current_user
 from app.modules.CV.db_service import fetch_resume_from_db
 from app.modules.CV.schemas import ResumeSchema
-from app.modules.fit_score.service import calculate_job_fit_score
-from app.modules.jobs.controller import get_job_detail, search_live_jobs
+from app.modules.jobs.controller import calculate_job_fit_score, get_job_detail, search_live_jobs
 from app.modules.jobs.providers.jsearch import JSearchError
-from app.modules.jobs.services.job_profile_extreactor import JobProfileExtractorError
+from app.modules.jobs.services.job_profile_extractor import JobProfileExtractorError
 from app.modules.jobs.services.job_suggestion import build_job_pool_from_queries
+from app.modules.jobs.services.query_service import (
+    get_or_generate_resume_job_queries,
+    delete_job_queries,
+    refresh_resume_job_queries,
+)
 from app.schemas import (
     JobDetailResponse,
-    JobDetailWithFitResponse,
     JobSearchRequest,
     JobSearchResponse,
+    FitScoreResponse,
 )
 from app.modules.jobs.schema import JobSuggestionRequest
+
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
@@ -50,7 +55,7 @@ async def read_job_detail(job_id: str):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/details/{job_id}/fit-score", response_model=JobDetailWithFitResponse)
+@router.get("/details/{job_id}/fit-score", response_model=FitScoreResponse)
 async def read_job_detail_with_fit_score(
     job_id: str,
     current_user=Depends(get_current_user),
@@ -76,9 +81,15 @@ async def suggest_jobs_from_my_cv(
     try:
         resume_data = fetch_resume_from_db(current_user.id)
         candidate_resume = ResumeSchema(**resume_data)
+        resume_id = str(resume_data["id"])
+
+        if request.queries:
+            used_queries = [q.strip().lower() for q in request.queries if q.strip()]
+        else:
+            used_queries = await get_or_generate_resume_job_queries(resume_id, candidate_resume)
 
         ranked_jobs = await build_job_pool_from_queries(
-            queries=request.queries,
+            queries=used_queries,
             candidate_resume=candidate_resume,
             location=request.location,
             country=request.country,
@@ -89,6 +100,7 @@ async def suggest_jobs_from_my_cv(
         )
 
         return {
+            "used_queries": used_queries,
             "total": len(ranked_jobs),
             "jobs": ranked_jobs,
         }
@@ -96,5 +108,29 @@ async def suggest_jobs_from_my_cv(
     except JSearchError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/queries")
+async def delete_queries(current_user=Depends(get_current_user)):
+    try:
+        resume_data = fetch_resume_from_db(current_user.id)
+        resume_id = str(resume_data["id"])
+        delete_job_queries(resume_id)
+        return {"message": "Job queries deleted successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/queries/refresh")
+async def refresh_queries(current_user=Depends(get_current_user)):
+    try:
+        resume_data = fetch_resume_from_db(current_user.id)
+        candidate_resume = ResumeSchema(**resume_data)
+        resume_id = str(resume_data["id"])
+        
+        new_queries = await refresh_resume_job_queries(resume_id, candidate_resume)
+        return {"queries": new_queries, "message": "Job queries refreshed successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

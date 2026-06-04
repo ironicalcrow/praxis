@@ -1,10 +1,4 @@
 from app.modules.CV.schemas import ResumeSchema
-from app.modules.fit_score.schema import (
-    CandidateFitProfile,
-    FitScoreRequest,
-    FitScoreResponse,
-    JobDetailWithFitResponse,
-)
 from app.modules.jobs.schema import (
     ApplyOption,
     EmployerReview,
@@ -17,6 +11,8 @@ from app.modules.jobs.schema import (
     JobSearchResponse,
     RequiredExperience,
     SalaryInfo,
+    FitScoreResponse,
+    JobQuerySchema,
 )
 
 
@@ -33,8 +29,6 @@ __all__ = (
     "JobRequirementProfile",
     "JobRequirementProfileResponse",
     "ResumeSchema",
-    "CandidateFitProfile",
     "FitScoreResponse",
-    "FitScoreRequest",
-    "JobDetailWithFitResponse",
+    "JobQuerySchema",
 )

@@ -1,9 +1,7 @@
-from app.schemas import ResumeSchema,JobCard
-from app.modules.fit_score.scorer import compute_fit_score
+from app.schemas import ResumeSchema, JobCard
 from app.modules.jobs.controller import get_job_detail, search_live_jobs
-from app.modules.jobs.services.job_profile_extreactor import (
-    extract_job_requirement_profile,
-)
+from app.modules.jobs.services.job_profile_extractor import extract_job_requirement_profile
+from app.modules.jobs.services.suggestion_scorer import compute_batch_suggestion_scores
 
 
 def get_job_unique_key(job: JobCard) -> str:
@@ -37,18 +35,23 @@ def cheap_skill_overlap_score(job: JobCard, resume: ResumeSchema) -> int:
 
 
 async def build_job_pool_from_queries(
-    queries: list[str],
+    queries: list[str] | None,
     candidate_resume: ResumeSchema,
     location: str | None = None,
     country: str = "bd",
     page: int = 1,
     num_pages: int = 1,
-    max_jobs_per_query: int = 5,
-    max_total_jobs: int = 5,
+    max_jobs_per_query: int = 10,
+    max_total_jobs: int = 30,
 ) -> list[dict]:
+    resolved_queries = queries or []
+
+    if not resolved_queries:
+        resolved_queries = ["junior software engineer"]
+
     job_map: dict[str, JobCard] = {}
 
-    for query in queries:
+    for query in resolved_queries:
         jobs = await search_live_jobs(
             query=query,
             location=location,
@@ -72,6 +75,7 @@ async def build_job_pool_from_queries(
 
     candidate_jobs = list(job_map.values())
 
+    # Cheap local pre-rank before expensive job detail/profile calls
     candidate_jobs.sort(
         key=lambda job: cheap_skill_overlap_score(job, candidate_resume),
         reverse=True,
@@ -79,7 +83,9 @@ async def build_job_pool_from_queries(
 
     candidate_jobs = candidate_jobs[:max_total_jobs]
 
-    ranked_jobs = []
+    job_profiles = {}
+    detailed_jobs_by_id = {}
+    job_cards_by_id = {}
 
     for job_card in candidate_jobs:
         if not job_card.external_id:
@@ -92,21 +98,28 @@ async def build_job_pool_from_queries(
 
         profile = await extract_job_requirement_profile(detail)
 
-        score = await compute_fit_score(
-            profile=profile,
-            candidate=candidate_resume,
-            add_reasoning=False,
-        )
+        job_profiles[job_card.external_id] = profile
+        detailed_jobs_by_id[job_card.external_id] = detail
+        job_cards_by_id[job_card.external_id] = job_card
 
+    score_map = await compute_batch_suggestion_scores(
+        candidate=candidate_resume,
+        job_profiles=job_profiles,
+    )
+
+    ranked_jobs = []
+
+    for job_id, detail in detailed_jobs_by_id.items():
         ranked_jobs.append(
             {
-                "job": job_card,
-                "fit_score": score,
+                "job": job_cards_by_id[job_id],
+                "job_detail": detail,
+                "suggestion_score": score_map.get(job_id, 0.0),
             }
         )
 
     ranked_jobs.sort(
-        key=lambda item: item["fit_score"].fit_score,
+        key=lambda item: item["suggestion_score"],
         reverse=True,
     )
 

@@ -5,8 +5,8 @@ from app.modules.jobs.providers.jsearch import (
     get_jsearch_job_detail,
     search_jsearch_jobs,
 )
-from app.modules.fit_score.service import calculate_job_fit_score
-from app.modules.jobs.services.job_profile_extreactor import extract_job_requirement_profile
+from app.modules.jobs.services.fit_scorer import compute_fit_score
+from app.modules.jobs.services.job_profile_extractor import extract_job_requirement_profile
 from app.schemas import JobCard, JobDetailResponse, ResumeSchema, FitScoreResponse
 
 
@@ -55,7 +55,7 @@ async def calculate_job_fit_score(
 
     profile = await extract_job_requirement_profile(job)
 
-    fit_score = await calculate_job_fit_score(
+    fit_score = await compute_fit_score(
         profile=profile,
         candidate=candidate_resume,
         add_reasoning=True,
