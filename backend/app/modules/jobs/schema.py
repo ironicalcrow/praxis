@@ -11,6 +11,12 @@ class JobSearchRequest(BaseModel):
     date_posted: str = "all"
 
 
+class JobQuerySchema(BaseModel):
+    query: str
+    reason: Optional[str] = None
+    priority: Optional[int] = None
+
+
 class ApplyOption(BaseModel):
     publisher: Optional[str] = None
     apply_link: Optional[str] = None
@@ -183,10 +189,18 @@ class JobSearchResponse(BaseModel):
     jobs: list[JobCard]
 
 class JobSuggestionRequest(BaseModel):
-    queries: list[str]
+    queries: Optional[list[str]]=None
     location: Optional[str] = None
     country: str = "bd"
     page: int = 1
     num_pages: int = 1
     max_jobs_per_query: int = 10
     max_total_jobs: int = 30
+
+
+class FitScoreResponse(BaseModel):
+    fit_score: float
+    verdict: str
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    reason: str
