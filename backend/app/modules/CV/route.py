@@ -6,9 +6,8 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 
 from app.modules.CV.cv import resume_parser
 from app.modules.CV.db_service import save_resume_to_db, fetch_resume_from_db
+from app.modules.CV.schemas import ResumeSchema, ResumeResponse, UploadCVResponse
 from app.modules.auth.dependency import get_current_user
-from fastapi import Depends, HTTPException
-from app.core.supabase import supabase_admin
 
 
 router = APIRouter()
@@ -19,7 +18,7 @@ UPLOAD_DIR = "uploads"
 Path(UPLOAD_DIR).mkdir(exist_ok=True)
 
 
-@router.post("/upload-cv")
+@router.post("/upload-cv", response_model=UploadCVResponse)
 async def upload_cv(
     file: UploadFile = File(...),
     current_user=Depends(get_current_user)
@@ -75,16 +74,11 @@ async def upload_cv(
             detail=str(e),
         )
     
-@router.get("/my-cv")
+@router.get("/my-cv", response_model=ResumeResponse)
 async def get_my_cv(current_user=Depends(get_current_user)):
     """
     Fetch logged-in user's CV from database.
     Requires access token.
     """
 
-    resume = fetch_resume_from_db(current_user.id)
-
-    return {
-        "success": True,
-        "data": resume
-    }
+    return fetch_resume_from_db(current_user.id)
