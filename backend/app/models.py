@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
 import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
 Base = declarative_base()
 
@@ -181,7 +182,7 @@ class Application(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
 
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     job_id = Column(String, ForeignKey("jobs.id"), nullable=True)
 
     status = Column(
@@ -236,7 +237,7 @@ class ApplicationStatusHistory(Base):
     old_status = Column(SQLEnum(ApplicationStatus), nullable=True)
     new_status = Column(SQLEnum(ApplicationStatus), nullable=False)
 
-    changed_by_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    changed_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     reason = Column(Text, nullable=True)
 
     changed_at = Column(DateTime, default=datetime.utcnow)
@@ -253,7 +254,7 @@ class ApplicationNote(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
 
     application_id = Column(String, ForeignKey("applications.id"), nullable=False)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     content = Column(Text, nullable=False)
 
