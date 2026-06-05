@@ -1,6 +1,5 @@
 __pycache__
 .env
 .venv
-
-collect_code.py
-all_code.txt
+.DS_Store
+tests

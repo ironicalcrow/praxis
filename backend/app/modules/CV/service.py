@@ -1,13 +1,10 @@
 import json
-import os
-from openai import OpenAI
-from app.modules.CV.schemas import ResumeSchema
-
 import re
-client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    base_url="https://openrouter.ai/api/v1",
-)
+
+from fastapi import HTTPException
+
+from app.schemas import ResumeSchema
+from app.core.llm_caller import call_llm, LLMCallerError
 
 
 async def extract_resume_with_grok(raw_text: str):
@@ -17,7 +14,9 @@ You are an expert ATS resume parser.
 
 Extract structured information from the resume.
 
-Return ONLY valid JSON (no explanation, no markdown).
+Return ONLY valid JSON.
+Do not include markdown.
+Do not include explanation.
 
 Schema:
 {{
@@ -37,37 +36,59 @@ Resume:
 {raw_text}
 """
 
-    response = client.chat.completions.create(
-        model="deepseek/deepseek-chat-v3-0324",
-        temperature=0,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a professional ATS resume parser that outputs ONLY valid JSON.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-    )
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a professional ATS resume parser that outputs ONLY valid JSON.",
+        },
+        {
+            "role": "user",
+            "content": prompt,
+        },
+    ]
 
-    content = response.choices[0].message.content
+    try:
+        content = await call_llm(
+            messages=messages,
+            model="deepseek/deepseek-chat-v3-0324",
+            temperature=0.0,
+            json_mode=True,
+        )
 
-    parsed_json = safe_json_parse(content)
+        parsed_json = safe_json_parse(content)
 
-    parsed_json["raw_text"] = raw_text
+        parsed_json["raw_text"] = raw_text
 
-    return ResumeSchema(**parsed_json)
+        return ResumeSchema(**parsed_json)
+
+    except LLMCallerError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM resume extraction failed: {str(e)}",
+        )
+
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to parse LLM JSON response: {str(e)}",
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Resume extraction failed: {str(e)}",
+        )
 
 
 def safe_json_parse(text: str):
+
+    if not text:
+        raise ValueError("Empty model output")
+
     text = text.strip()
 
-    # remove markdown fences
-    text = text.replace("```json", "").replace("```", "")
+    text = text.replace("```json", "").replace("```", "").strip()
 
-    # extract only JSON object
     match = re.search(r"\{.*\}", text, re.DOTALL)
 
     if not match:
