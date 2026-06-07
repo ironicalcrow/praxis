@@ -1,7 +1,9 @@
 from uuid import UUID
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+
+from app.modules.notifications.service import create_and_publish as notify
 
 from app.modules.application.db_service import (
     create_application_from_job_db,
@@ -33,12 +35,23 @@ router = APIRouter(
 
 
 @router.post("/applications/from-job")
-def create_application_from_job(payload: ApplicationCreation):
+def create_application_from_job(payload: ApplicationCreation, background_tasks: BackgroundTasks):
     try:
-        return create_application_from_job_db(
+        result = create_application_from_job_db(
             user_id=payload.user_id,
             job_data=payload.job,
         )
+        company = payload.job.get("company_name", payload.job.get("company", ""))
+        title = payload.job.get("title", "Job")
+        background_tasks.add_task(
+            notify,
+            user_id=str(payload.user_id),
+            type="application_saved",
+            title="Job added to tracker",
+            message=f"\"{title}\" at {company} has been saved to your applications.",
+            data={"job_title": title, "company": company},
+        )
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -93,19 +106,40 @@ def get_kanban_applications(user_id: UUID = Query(...)):
         raise HTTPException(status_code=500, detail=f"Failed to fetch kanban applications: {str(e)}")
 
 
+_STATUS_TITLES = {
+    "applied": ("Application submitted", "Your application has been marked as submitted."),
+    "interviewing": ("Interview stage reached!", "You've moved to the interview stage. Good luck!"),
+    "offer": ("Offer received!", "Congratulations — you've received an offer!"),
+    "rejected": ("Application update", "This application has been marked as rejected."),
+}
+
+
 @router.patch("/applications/{application_id}/status")
 def update_application_status(
     application_id: UUID,
     payload: UpdateStatusRequest,
+    background_tasks: BackgroundTasks,
 ):
     application_id = str(application_id)
     try:
-        return update_application_status_db(
+        result = update_application_status_db(
             user_id=payload.user_id,
             application_id=application_id,
             new_status=payload.status,
             reason=payload.reason,
         )
+        status_lower = payload.status.lower()
+        if status_lower in _STATUS_TITLES:
+            title, message = _STATUS_TITLES[status_lower]
+            background_tasks.add_task(
+                notify,
+                user_id=str(payload.user_id),
+                type="application_status_changed",
+                title=title,
+                message=message,
+                data={"application_id": application_id, "new_status": payload.status},
+            )
+        return result
     except HTTPException:
         raise
     except Exception as e:

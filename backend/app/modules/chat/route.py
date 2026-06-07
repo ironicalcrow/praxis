@@ -1,7 +1,10 @@
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from app.modules.notifications.service import create_and_publish as notify
 
 from app.core.session import get_db
 from app.modules.auth.dependency import get_current_user
@@ -162,4 +165,11 @@ async def summarize_conversation(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Summarization failed: {str(e)}")
 
+    asyncio.create_task(notify(
+        user_id=str(current_user.id),
+        type="conversation_summarized",
+        title="Coaching session saved",
+        message=f"Key insights from \"{conv.title}\" have been saved as memory for future sessions.",
+        data={"conversation_id": conversation_id},
+    ))
     return {"conversation_id": conversation_id, "summary": summary}

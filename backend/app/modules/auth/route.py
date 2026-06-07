@@ -34,10 +34,10 @@ def pre_warm_cache_task(user_id: str):
             if resume_data:
                 candidate_resume = ResumeSchema(**resume_data)
                 # This will automatically compute and cache for 24h
-                await build_job_pool_from_queries(
-                    queries=None,
+                await build_suggestion_pool(
+                    user_id=user_id,
                     candidate_resume=candidate_resume,
-                    user_id=user_id
+                    queries=[]
                 )
         except Exception as e:
             print(f"Pre-warm failed: {e}")

@@ -4,6 +4,8 @@ import uuid
 from pathlib import Path
 from uuid import UUID as PUUID
 
+from app.modules.notifications.service import create_and_publish as notify
+
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 
 from app.modules.CV.cv import resume_parser
@@ -113,6 +115,13 @@ async def upload_cv(
         # Steps 3–5: embed, queries, pool — best-effort
         await _run_background_steps(resume_id, resume_obj, user_id, parsed_resume)
 
+        asyncio.create_task(notify(
+            user_id=user_id,
+            type="cv_parsed",
+            title="CV uploaded and parsed",
+            message="Your CV has been processed. Job suggestions will refresh shortly.",
+            data={"resume_id": str(db_result["resume_id"])},
+        ))
         return {
             "success": True,
             "message": "CV uploaded, parsed, and saved successfully",
@@ -182,6 +191,13 @@ async def activate_past_cv(upload_id: PUUID, current_user=Depends(get_current_us
 
         await _run_background_steps(resume_id, resume_obj, user_id, parsed_resume)
 
+        asyncio.create_task(notify(
+            user_id=user_id,
+            type="cv_activated",
+            title="CV version activated",
+            message="Your previous CV has been set as active and is ready for job matching.",
+            data={"resume_id": str(db_result["resume_id"]), "upload_id": upload_id},
+        ))
         return {
             "success": True,
             "message": "CV activated successfully",

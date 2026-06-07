@@ -1,8 +1,10 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+
+from app.modules.notifications.service import create_and_publish as notify
 
 from app.core.session import get_db
 from app.modules.auth.dependency import get_current_user
@@ -36,6 +38,7 @@ def create_goal(
 def create_goals_from_roadmap(
     roadmap_id: UUID,
     body: Optional[BulkGoalConfirm] = Body(default=None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -58,6 +61,14 @@ def create_goals_from_roadmap(
         milestone_ids=milestone_ids,
     )
     print(f"[goals/from-roadmap] goals created → {len(goals)}")
+    background_tasks.add_task(
+        notify,
+        user_id=user_id,
+        type="goals_created_from_roadmap",
+        title="Goals created from roadmap",
+        message=f"{len(goals)} goal(s) have been added to your tracker from the roadmap.",
+        data={"roadmap_id": roadmap_id, "goal_count": len(goals)},
+    )
     return goals
 
 
@@ -95,6 +106,7 @@ def get_goal(
 def update_goal(
     goal_id: UUID,
     body: GoalUpdate,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -110,6 +122,15 @@ def update_goal(
     goal = goals_db.update_goal(db, goal_id, str(current_user.id), data)
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
+    if data.get("status") == "completed":
+        background_tasks.add_task(
+            notify,
+            user_id=str(current_user.id),
+            type="goal_completed",
+            title="Goal completed!",
+            message=f"You completed \"{goal.title}\". Keep up the momentum!",
+            data={"goal_id": goal.id},
+        )
     return goal
 
 

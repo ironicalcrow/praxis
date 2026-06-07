@@ -259,6 +259,14 @@ async def build_suggestion_pool(
         await r.setex(_pool_key(user_id), POOL_TTL_SECONDS, json.dumps(pool_data))
         await r.set(_offset_key(user_id), 0)
         print(f"[JobSuggestion] ✅ Pool of {len(pool_data)} jobs stored in Redis.")
+        from app.modules.notifications.service import create_and_publish as notify
+        asyncio.create_task(notify(
+            user_id=user_id,
+            type="job_suggestions_ready",
+            title="Job suggestions ready",
+            message=f"We found {len(pool_data)} job matches based on your CV. Check them out!",
+            data={"pool_total": len(pool_data)},
+        ))
     except Exception as e:
         print(f"[JobSuggestion] ⚠️ Failed to cache pool in Redis: {e}")
 

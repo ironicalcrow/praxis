@@ -18,6 +18,7 @@ from app.models import (
     RoadmapPhase,
     RoadmapMilestone,
     Goal,
+    Notification,
 )
 from app.modules.jobs.models import JobQuery
 
@@ -39,6 +40,9 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+from app.modules.notifications.route import ws_notifications
+app.add_api_websocket_route("/ws/notifications", ws_notifications)
 
 
 @app.get("/")

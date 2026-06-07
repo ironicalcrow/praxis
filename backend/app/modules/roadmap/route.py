@@ -1,7 +1,10 @@
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+from app.modules.notifications.service import create_and_publish as notify
 
 from app.core.session import get_db
 from app.modules.auth.dependency import get_current_user
@@ -33,6 +36,13 @@ async def generate_from_conversation(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Roadmap generation failed: {str(e)}")
 
+    asyncio.create_task(notify(
+        user_id=str(current_user.id),
+        type="roadmap_generated",
+        title="Your roadmap is ready",
+        message=f"A career roadmap \"{roadmap.title}\" has been generated from your conversation.",
+        data={"roadmap_id": roadmap.id, "source_type": "chat"},
+    ))
     return roadmap_service.build_roadmap_insight_preview(roadmap)
 
 
@@ -51,6 +61,13 @@ async def generate_from_job(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Roadmap generation failed: {str(e)}")
 
+    asyncio.create_task(notify(
+        user_id=str(current_user.id),
+        type="roadmap_generated",
+        title="Your roadmap is ready",
+        message=f"A career roadmap \"{roadmap.title}\" has been generated from the job listing.",
+        data={"roadmap_id": roadmap.id, "source_type": "job"},
+    ))
     return roadmap_service.build_roadmap_insight_preview(roadmap)
 
 
