@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -22,14 +24,6 @@ async def generate_from_conversation(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Generate a structured roadmap from a coaching conversation.
-
-    Flow:
-      conversation transcript → LLM → roadmap (phases + milestones)
-      → Returns roadmap + suggested_goals list for user review
-      → User confirms goals via POST /goals/from-roadmap/{roadmap_id}
-    """
     try:
         roadmap = await roadmap_service.generate_from_conversation(
             body.conversation_id, str(current_user.id), db
@@ -48,12 +42,6 @@ async def generate_from_job(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Generate a gap-analysis roadmap from a job listing.
-
-    Compares the user's CV skills against the job requirements and produces
-    a targeted upskilling plan. Returns roadmap + suggested_goals for review.
-    """
     try:
         roadmap = await roadmap_service.generate_from_job(
             body.job_id, str(current_user.id), db
@@ -72,7 +60,6 @@ def create_manual_roadmap(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Create a blank roadmap manually. Phases and milestones can be added later."""
     roadmap = roadmap_db.create_roadmap(
         db=db,
         user_id=str(current_user.id),
@@ -90,17 +77,16 @@ def list_roadmaps(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """List all roadmaps for the current user, newest first."""
     return roadmap_db.get_roadmaps(db, str(current_user.id))
 
 
 @router.get("/{roadmap_id}", response_model=RoadmapDetailOut)
 def get_roadmap(
-    roadmap_id: str,
+    roadmap_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Get a full roadmap with all phases and milestones."""
+    roadmap_id = str(roadmap_id)
     roadmap = roadmap_db.get_roadmap(db, roadmap_id, str(current_user.id))
     if not roadmap:
         raise HTTPException(status_code=404, detail="Roadmap not found")
@@ -109,10 +95,11 @@ def get_roadmap(
 
 @router.delete("/{roadmap_id}", status_code=204)
 def delete_roadmap(
-    roadmap_id: str,
+    roadmap_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    roadmap_id = str(roadmap_id)
     deleted = roadmap_db.delete_roadmap(db, roadmap_id, str(current_user.id))
     if not deleted:
         raise HTTPException(status_code=404, detail="Roadmap not found")

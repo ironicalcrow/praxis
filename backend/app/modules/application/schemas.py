@@ -1,13 +1,18 @@
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+
 from pydantic import BaseModel
 
+from app.core.utils import UUIDStr
+
+
 class ApplicationCreation(BaseModel):
-    user_id: str
+    user_id: UUIDStr
     job: Dict[str, Any]
 
+
 class ApplicationCreationManual(BaseModel):
-    user_id: str
+    user_id: UUIDStr
     job_title: str
     company: str
     location: Optional[str] = None
@@ -15,14 +20,18 @@ class ApplicationCreationManual(BaseModel):
     source: Optional[str] = "manual"
     salary: Optional[str] = None
 
+
 class UpdateStatusRequest(BaseModel):
-    user_id: str
+    user_id: UUIDStr
     status: str
-    reason:Optional[str]=None
+    reason: Optional[str] = None
+
 
 class ApplicationNoteRequest(BaseModel):
-    user_id:str
-    content:str
+    user_id: UUIDStr
+    content: str
+
+
 class ApplicationNoteRespone(BaseModel):
     id: str
     application_id: str
@@ -32,6 +41,7 @@ class ApplicationNoteRespone(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class ApplicationStatusHistoryResponse(BaseModel):
     id: str
@@ -43,9 +53,10 @@ class ApplicationStatusHistoryResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class ApplicationResponse(BaseModel):
     id: str
-    user_id: str
+    user_id: UUIDStr
     job_id: Optional[str] = None
 
     job_title: str
@@ -69,6 +80,7 @@ class ApplicationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class DeleteApplicationResponse(BaseModel):
     deleted: bool

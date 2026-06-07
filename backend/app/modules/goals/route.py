@@ -1,4 +1,5 @@
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -33,16 +34,13 @@ def create_goal(
 
 @router.post("/from-roadmap/{roadmap_id}", response_model=list[GoalOut], status_code=201)
 def create_goals_from_roadmap(
-    roadmap_id: str,
+    roadmap_id: UUID,
     body: Optional[BulkGoalConfirm] = Body(default=None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Promote roadmap milestones to Goals.
-    - No body (or empty body): creates a goal for every milestone in the roadmap.
-    - Body with `milestone_ids`: creates goals only for those milestones.
-    """
+    
+    roadmap_id = str(roadmap_id)
     user_id = str(current_user.id)
     print(f"[goals/from-roadmap] roadmap_id={roadmap_id!r}  user_id={user_id!r}")
 
@@ -72,7 +70,6 @@ def list_goals(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """List all goals for the current user, optionally filtered by status."""
     if status and status not in _VALID_STATUSES:
         raise HTTPException(
             status_code=400,
@@ -83,10 +80,11 @@ def list_goals(
 
 @router.get("/{goal_id}", response_model=GoalOut)
 def get_goal(
-    goal_id: str,
+    goal_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    goal_id = str(goal_id)
     goal = goals_db.get_goal(db, goal_id, str(current_user.id))
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
@@ -95,12 +93,12 @@ def get_goal(
 
 @router.patch("/{goal_id}", response_model=GoalOut)
 def update_goal(
-    goal_id: str,
+    goal_id: UUID,
     body: GoalUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Partial update: change status, title, description, or target_date."""
+    goal_id = str(goal_id)
     data = body.model_dump(exclude_none=True)
 
     if "status" in data and data["status"] not in _VALID_STATUSES:
@@ -117,10 +115,11 @@ def update_goal(
 
 @router.delete("/{goal_id}", status_code=204)
 def delete_goal(
-    goal_id: str,
+    goal_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    goal_id = str(goal_id)
     deleted = goals_db.delete_goal(db, goal_id, str(current_user.id))
     if not deleted:
         raise HTTPException(status_code=404, detail="Goal not found")

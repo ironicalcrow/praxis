@@ -3,6 +3,8 @@ from typing import Optional, List
 
 from pydantic import BaseModel
 
+from app.core.utils import UUIDStr
+
 
 class GoalCreate(BaseModel):
     title: str
@@ -19,7 +21,7 @@ class GoalUpdate(BaseModel):
 
 class GoalOut(BaseModel):
     id: str
-    user_id: str
+    user_id: UUIDStr
     title: str
     description: Optional[str] = None
     status: str

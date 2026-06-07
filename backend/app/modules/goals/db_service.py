@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -40,11 +41,7 @@ def create_goals_from_milestones(
     roadmap_id: str,
     milestone_ids: Optional[list[str]] = None,
 ) -> list[Goal]:
-    """
-    Bulk-create goals from roadmap milestones.
-    milestone_ids=None  → create a goal for every milestone in the roadmap.
-    milestone_ids=[...] → create goals only for the specified IDs.
-    """
+
     all_milestones = get_all_milestones_for_roadmap(db, roadmap_id)
     print(f"[create_goals_from_milestones] roadmap_id={roadmap_id!r}  milestones found={len(all_milestones)}")
     for m in all_milestones:
@@ -58,8 +55,21 @@ def create_goals_from_milestones(
 
     print(f"[create_goals_from_milestones] milestones_to_use={len(milestones_to_use)}")
 
+    # Build a day-offset map for every milestone so sequential goals get
+    # cumulative deadlines (milestone 2 starts after milestone 1 ends, etc.).
+    offset_map: dict[str, int] = {}
+    running_days = 0
+    for m in milestones_to_use:
+        days = m.suggested_target_days or m.estimated_days or 0
+        running_days += days
+        offset_map[m.id] = running_days
+
+    today = date.today()
     goals = []
     for milestone in milestones_to_use:
+        total_days = offset_map[milestone.id]
+        target = today + timedelta(days=total_days) if total_days else None
+
         goal = Goal(
             user_id=user_id,
             title=milestone.title,
@@ -68,6 +78,7 @@ def create_goals_from_milestones(
             roadmap_id=roadmap_id,
             milestone_id=milestone.id,
             status="not_started",
+            target_date=target,
         )
         db.add(goal)
         goals.append(goal)

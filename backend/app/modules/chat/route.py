@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -26,7 +28,6 @@ def create_conversation(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Create a new conversation topic (e.g. 'Backend Career Growth')."""
     return chat_db.create_conversation(db, str(current_user.id), body.title)
 
 
@@ -35,16 +36,16 @@ def list_conversations(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """List all conversations for the current user, newest first."""
     return chat_db.get_conversations(db, str(current_user.id))
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationOut)
 def get_conversation(
-    conversation_id: str,
+    conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    conversation_id = str(conversation_id)
     conv = chat_db.get_conversation(db, conversation_id, str(current_user.id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -59,12 +60,12 @@ def get_conversation(
     status_code=201,
 )
 def create_session(
-    conversation_id: str,
+    conversation_id: UUID,
     body: SessionCreate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Start a new chat session within an existing conversation."""
+    conversation_id = str(conversation_id)
     conv = chat_db.get_conversation(db, conversation_id, str(current_user.id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -76,10 +77,11 @@ def create_session(
     response_model=list[SessionOut],
 )
 def list_sessions(
-    conversation_id: str,
+    conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    conversation_id = str(conversation_id)
     conv = chat_db.get_conversation(db, conversation_id, str(current_user.id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -93,12 +95,13 @@ def list_sessions(
     response_model=list[ChatMessageOut],
 )
 def get_messages(
-    conversation_id: str,
-    session_id: str,
+    conversation_id: UUID,
+    session_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Retrieve all messages in a session."""
+    conversation_id = str(conversation_id)
+    session_id = str(session_id)
     conv = chat_db.get_conversation(db, conversation_id, str(current_user.id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -110,16 +113,15 @@ def get_messages(
     response_model=ChatResponse,
 )
 async def send_message(
-    conversation_id: str,
-    session_id: str,
+    conversation_id: UUID,
+    session_id: UUID,
     body: ChatMessageIn,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Send a message and get an AI response grounded in the user's CV.
-    The response is a structured markdown reply with suggestions and next steps.
-    """
+    conversation_id = str(conversation_id)
+    session_id = str(session_id)
+
     conv = chat_db.get_conversation(db, conversation_id, str(current_user.id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -146,14 +148,11 @@ async def send_message(
 
 @router.post("/conversations/{conversation_id}/summarize")
 async def summarize_conversation(
-    conversation_id: str,
+    conversation_id: UUID,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Generate and save a summary of the entire conversation.
-    This summary is automatically injected into future conversations as memory.
-    """
+    conversation_id = str(conversation_id)
     conv = chat_db.get_conversation(db, conversation_id, str(current_user.id))
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")

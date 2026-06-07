@@ -3,6 +3,8 @@ from typing import Optional, List
 
 from pydantic import BaseModel
 
+from app.core.utils import UUIDStr
+
 
 # ── Milestone ──────────────────────────────────────────────────────────────────
 
@@ -13,6 +15,8 @@ class MilestoneOut(BaseModel):
     description: Optional[str] = None
     resource_url: Optional[str] = None
     order_index: int
+    estimated_days: Optional[int] = None
+    suggested_target_days: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -37,7 +41,7 @@ class PhaseOut(BaseModel):
 
 class RoadmapOut(BaseModel):
     id: str
-    user_id: str
+    user_id: UUIDStr
     title: str
     description: Optional[str] = None
     source_type: str

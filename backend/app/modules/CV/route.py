@@ -2,6 +2,7 @@ import asyncio
 import tempfile
 import uuid
 from pathlib import Path
+from uuid import UUID as PUUID
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 
@@ -145,7 +146,8 @@ async def list_cv_uploads(current_user=Depends(get_current_user)):
 
 
 @router.post("/uploads/{upload_id}/activate", response_model=UploadCVResponse)
-async def activate_past_cv(upload_id: str, current_user=Depends(get_current_user)):
+async def activate_past_cv(upload_id: PUUID, current_user=Depends(get_current_user)):
+    upload_id = str(upload_id)
     """
     Download a past CV from Supabase, re-parse it, make it the active CV,
     then run the full downstream flow (embed → queries → invalidate pool).

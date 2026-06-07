@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.modules.auth.dependency import get_current_user
@@ -61,7 +63,8 @@ async def live_search_jobs(
 
 
 @router.get("/details/{job_id}", response_model=JobSchema)
-async def read_job_detail(job_id: str, current_user=Depends(get_current_user)):
+async def read_job_detail(job_id: UUID, current_user=Depends(get_current_user)):
+    job_id = str(job_id)
     try:
         return await get_job_detail(job_id=job_id, current_user=current_user)
     except Exception as e:

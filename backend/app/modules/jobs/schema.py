@@ -1,7 +1,10 @@
 from typing import Any, Optional
 from datetime import datetime
-from pydantic import BaseModel, PrivateAttr, Field, field_validator
 from enum import Enum
+
+from pydantic import BaseModel, PrivateAttr, Field, field_validator
+
+from app.core.utils import UUIDStr
 
 class JobTypeEnum(str, Enum):
     # Employment type
@@ -23,7 +26,7 @@ class UserPreferenceUpdate(BaseModel):
 
 class UserPreferenceResponse(BaseModel):
     id: str
-    user_id: str
+    user_id: UUIDStr
     job_types: list[str] = Field(default_factory=list)
 
 class JobSearchRequest(BaseModel):

@@ -36,7 +36,7 @@ _ROADMAP_JSON_SCHEMA = (
     '"milestones": ['
     '{"title": "Learn/Build <specific skill or deliverable>", '
     '"description": "Skill: <exact skill/technology>. Practice: <concrete exercise or mini-project to build>. Outcome: <what you can do after>.", '
-    '"resource_url": null, "order_index": 1}'
+    '"resource_url": null, "order_index": 1, "estimated_days": 7}'
     "]}"
     "]}"
 )
