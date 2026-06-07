@@ -22,7 +22,8 @@ def get_current_user(
 
         return response.user
 
-    except Exception:
+    except Exception as e:
+        print(f"Supabase auth error: {e}")
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired token"
