@@ -134,7 +134,49 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    loadKanbanApplications();
+    let cancelled = false;
+
+    (async () => {
+      if (!DEMO_USER_ID) {
+        if (!cancelled) {
+          setApplicationsError(
+            "Missing VITE_DEMO_USER_ID in frontend/.env. Ask backend team for a test user UUID."
+          );
+        }
+        return;
+      }
+
+      try {
+        setIsLoadingApplications(true);
+        setApplicationsError("");
+
+        const data = await fetchKanbanApplications(DEMO_USER_ID);
+
+        if (cancelled) return;
+
+        setKanban({
+          saved: data.saved ?? [],
+          applied: data.applied ?? [],
+          interviewing: data.interviewing ?? [],
+          offer: data.offer ?? [],
+          rejected: data.rejected ?? [],
+        });
+      } catch (error) {
+        if (!cancelled) {
+          setApplicationsError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load Kanban applications"
+          );
+        }
+      } finally {
+        if (!cancelled) setIsLoadingApplications(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const allApplications = useMemo(

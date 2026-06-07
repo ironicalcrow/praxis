@@ -1,9 +1,13 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { AuthProvider } from "./auth/AuthContext";
+import ProtectedRoute from "./auth/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import CvUploadPage from "./pages/CvUploadPage";
 import DashboardPage from "./pages/DashboardPage";
 import JobSearchPage from "./pages/JobSearchPage";
 import LandingPage from "./pages/LandingPage";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -23,21 +27,38 @@ function PlaceholderPage({ title }: { title: string }) {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
-        <Route element={<AppLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/jobs" element={<JobSearchPage />} />
-          <Route path="/cv" element={<CvUploadPage />} />
-          <Route path="/assistant" element={<PlaceholderPage title="AI Assistant" />} />
-          <Route path="/calendar" element={<PlaceholderPage title="Calendar" />} />
-          <Route path="/goals" element={<PlaceholderPage title="Goals" />} />
-          <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+          {/* Protected routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/jobs" element={<JobSearchPage />} />
+              <Route path="/cv" element={<CvUploadPage />} />
+              <Route
+                path="/assistant"
+                element={<PlaceholderPage title="AI Assistant" />}
+              />
+              <Route
+                path="/calendar"
+                element={<PlaceholderPage title="Calendar" />}
+              />
+              <Route path="/goals" element={<PlaceholderPage title="Goals" />} />
+              <Route
+                path="/settings"
+                element={<PlaceholderPage title="Settings" />}
+              />
+            </Route>
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
