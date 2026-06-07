@@ -29,6 +29,7 @@ class ResumeSchema(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
+    country: Optional[str] = None
 
     skills: List[str] = Field(default_factory=list)
 
@@ -49,8 +50,10 @@ class ResumeResponse(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
+    country: Optional[str] = None
     years_of_experience: Optional[int] = None
     raw_text: Optional[str] = None
+    file_url: Optional[str] = None
     skills: List[str] = Field(default_factory=list)
     education: List[Education] = Field(default_factory=list)
     experience: List[Experience] = Field(default_factory=list)
@@ -67,4 +70,13 @@ class UploadCVResponse(BaseModel):
     success: bool
     message: str
     resume_id: UUID
+    file_url: Optional[str] = None
     data: ResumeSchema
+
+
+class CVUploadRecord(BaseModel):
+    id: str
+    file_url: str
+    original_filename: Optional[str] = None
+    is_active: bool
+    uploaded_at: datetime

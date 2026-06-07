@@ -126,6 +126,7 @@ class AuthService:
             return AuthResponse(
                 access_token=auth_response.session.access_token,
                 refresh_token=auth_response.session.refresh_token,
+                user=auth_response.user
             )
 
         except HTTPException:

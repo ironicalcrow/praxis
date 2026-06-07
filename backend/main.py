@@ -28,3 +28,30 @@ app.include_router(api_router)
 @app.get("/")
 def root():
     return {"message": "Praxis server is running"}
+
+
+@app.get("/health")
+async def health():
+    """Dependency health check — no auth required."""
+    from sqlalchemy import text
+    status = {"db": "ok", "redis": "ok", "status": "healthy"}
+
+    try:
+        from app.core.session import SessionLocal
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+    except Exception as e:
+        status["db"] = f"error: {e}"
+        status["status"] = "degraded"
+
+    try:
+        import redis.asyncio as aioredis
+        from app.core.config import settings
+        r = aioredis.from_url(settings.REDIS_URL)
+        await r.ping()
+        await r.aclose()
+    except Exception as e:
+        status["redis"] = f"error: {e}"
+        status["status"] = "degraded"
+
+    return status

@@ -1,64 +1,453 @@
-from typing import Optional
+from typing import Optional, Any
+import asyncio
+from datetime import datetime
+import uuid
 
 from app.modules.CV.db_service import fetch_resume_from_db
-from app.modules.jobs.providers.jsearch import (
-    get_jsearch_job_detail,
-    search_jsearch_jobs,
-)
 from app.modules.jobs.services.fit_scorer import compute_fit_score
-from app.modules.jobs.services.job_profile_extractor import extract_job_requirement_profile
-from app.schemas import JobCard, JobDetailResponse, ResumeSchema, FitScoreResponse
+from app.schemas import JobSchema, ResumeSchema, FitScoreResponse, JobRequirementProfile
+
+from app.providers import JSearchScraper
+from app.modules.jobs.services.deduplicator import deduplicate_raw_jobs
+from app.modules.jobs.models import Job, JobQuery, UserPreference
+from app.core.session import SessionLocal
+from app.core.llm_caller import embed_text
+
+
+def _job_to_profile(job) -> JobRequirementProfile:
+    skills = list(job.skills_and_technologies or []) if hasattr(job, 'skills_and_technologies') else []
+    return JobRequirementProfile(
+        summary=getattr(job, 'llm_summary', None) or "",
+        description=getattr(job, 'description', None) or "",
+        required_skills=skills,
+        preferred_skills=[],
+        tools_and_technologies=skills,
+        soft_skills=[],
+        qualifications=list(job.qualifications or []) if hasattr(job, 'qualifications') else [],
+        responsibilities=list(job.responsibilities or []) if hasattr(job, 'responsibilities') else [],
+    )
+
+
+def fast_map_db_to_schema(db_job: Job) -> JobSchema:
+    return JobSchema(
+        id=db_job.id,
+        external_id=db_job.external_id,
+        provider_id=db_job.provider_id,
+        title=db_job.title,
+        company_name=db_job.company_name,
+        location=db_job.location,
+        posted_at=db_job.posted_at,
+        apply_urls=db_job.apply_urls or [],
+        description=db_job.description,
+        llm_summary=db_job.llm_summary,
+        skills_and_technologies=db_job.skills_and_technologies or [],
+        responsibilities=db_job.responsibilities or [],
+        job_types=db_job.job_types or [],
+        metadata=db_job.job_metadata or {},
+    )
 
 
 async def search_live_jobs(
     query: str,
+    user_id: uuid.UUID,
+    resume_id: str,
     location: Optional[str] = None,
     page: int = 1,
     num_pages: int = 1,
-    country: str = "us",
-    date_posted: str = "all",
-) -> list[JobCard]:
-    return await search_jsearch_jobs(
-        query=query,
-        location=location,
-        page=page,
-        num_pages=num_pages,
-        country=country,
-        date_posted=date_posted,
+    country: str = "bd",
+    remote_jobs_only: Optional[bool] = None,
+) -> list[JobSchema]:
+    # 1. Fetch UserPreference for location context
+    def fetch_prefs():
+        with SessionLocal() as db:
+            return db.query(UserPreference).filter(UserPreference.user_id == user_id).first()
+
+    prefs = await asyncio.to_thread(fetch_prefs)
+    target_loc = location or country or "Any"
+
+    def manage_queries():
+        with SessionLocal() as db:
+            from app.modules.jobs.services.query_service import _get_or_create_search_query
+            from app.modules.jobs.models import SearchQuery
+
+            sq_id = _get_or_create_search_query(db, query, target_loc)
+            sq = db.query(SearchQuery).filter(SearchQuery.id == sq_id).first()
+
+            is_stale = True
+            if sq and sq.last_run_at:
+                age_s = (datetime.utcnow() - sq.last_run_at).total_seconds()
+                if age_s < 86400:
+                    is_stale = False
+                    print(f"[LiveSearch] Cache HOT for '{query}' (age {age_s/3600:.1f}h). Bypassing API.")
+                else:
+                    print(f"[LiveSearch] Cache STALE for '{query}'. Will hit API.")
+            else:
+                print(f"[LiveSearch] Brand new query '{query}'.")
+
+            user_queries = (
+                db.query(JobQuery)
+                .filter(JobQuery.resume_id == resume_id)
+                .order_by(JobQuery.priority.desc(), JobQuery.added_at.asc())
+                .all()
+            )
+
+            existing = next((q for q in user_queries if q.search_query_id == sq_id), None)
+            if not existing:
+                if len(user_queries) >= 10:
+                    evicted = user_queries[0]
+                    print(f"[ManualSearch] Evicting lowest-priority query '{evicted.query}'.")
+                    db.delete(evicted)
+
+                db.add(JobQuery(
+                    id=uuid.uuid4(),
+                    resume_id=uuid.UUID(resume_id),
+                    search_query_id=sq_id,
+                    query=query,
+                    reason="user searched",
+                    priority=10,
+                    remote_jobs_only=remote_jobs_only,
+                ))
+            else:
+                existing.priority = 10
+                existing.added_at = datetime.utcnow()
+
+            manual_count = sum(1 for q in user_queries if q.reason == "user searched")
+            trigger_refresh = manual_count > 5
+            if trigger_refresh:
+                print(f"[ManualSearch] Manual search threshold hit ({manual_count}). Triggering query refresh.")
+
+            db.commit()
+            return is_stale, sq_id, trigger_refresh
+
+    is_stale, sq_id, trigger_refresh = await asyncio.to_thread(manage_queries)
+
+    if trigger_refresh:
+        try:
+            from app.modules.CV.route import fetch_resume_from_db as fetch_cv
+            resume_obj_data = await asyncio.to_thread(fetch_cv, user_id)
+            if resume_obj_data:
+                from app.modules.jobs.services.query_service import refresh_resume_job_queries
+                asyncio.create_task(
+                    refresh_resume_job_queries(str(resume_id), ResumeSchema(**resume_obj_data))
+                )
+        except Exception as e:
+            print(f"[ManualSearch] Auto-refresh failed to start: {e}")
+
+    if is_stale:
+        try:
+            from app.core.worker import redis_settings
+            from arq import create_pool
+            redis = await create_pool(redis_settings)
+            await redis.enqueue_job('collect_jobs_for_query', query, target_loc, sq_id)
+            await redis.close()
+            print(f"[LiveSearch] Enqueued 'collect_jobs_for_query' for '{query}'.")
+        except Exception as e:
+            print(f"[LiveSearch] Failed to enqueue ARQ job: {e}")
+
+        # Only invalidate pool when new data is actually being fetched
+        try:
+            from app.modules.jobs.services.job_suggestion import async_invalidate_pool
+            await async_invalidate_pool(str(user_id))
+        except Exception as e:
+            print(f"[LiveSearch] Pool invalidation failed: {e}")
+
+    # Concurrent: pgvector DB search + live JSearch
+    try:
+        vector = await embed_text(query)
+    except Exception as e:
+        print(f"[LiveSearch] Query embedding failed: {e}. DB search will be skipped.")
+        vector = None
+
+    def search_db():
+        with SessionLocal() as db:
+            if vector is None:
+                return []
+            try:
+                q = db.query(Job).filter(Job.embedding.is_not(None))
+                if location:
+                    q = q.filter(Job.location.ilike(f"%{location}%"))
+                if country and country != "any":
+                    q = q.filter(Job.location.ilike(f"%{country}%"))
+                limit = num_pages * 10
+                offset = (page - 1) * 10
+                return q.order_by(Job.embedding.cosine_distance(vector)).offset(offset).limit(limit).all()
+            except Exception as e:
+                print(f"[LiveSearch] DB search error: {e}")
+                return []
+
+    async def fetch_live():
+        if page == 1 and is_stale:
+            try:
+                scraper = JSearchScraper()
+                live_loc = location if location else (country if country != "any" else "")
+                return await scraper.search_jobs(query, location=live_loc, limit=10)
+            except Exception as e:
+                print(f"[LiveSearch] Live fetch failed: {e}")
+        return []
+
+    db_jobs, live_raw = await asyncio.gather(
+        asyncio.to_thread(search_db),
+        fetch_live(),
     )
 
+    final_schemas: list[JobSchema] = []
 
-async def get_job_detail(
-    job_id: str,
-) -> JobDetailResponse | None:
-    job = await get_jsearch_job_detail(
-        job_id=job_id,
-    )
+    if live_raw:
+        import redis.asyncio as aioredis
+        from app.core.config import settings
+        r = aioredis.from_url(settings.REDIS_URL)
+        db_job_ids = {j.id for j in db_jobs}
+        try:
+            from app.modules.jobs.services.jsearch_parser import parse_jsearch_to_schema
+            for r_job in live_raw:
+                if r_job.job_id in db_job_ids:
+                    continue
+                try:
+                    await r.setex(f"temp_job:{r_job.job_id}", 7200, r_job.model_dump_json())
+                    parsed = parse_jsearch_to_schema(r_job)
+                    final_schemas.append(JobSchema(
+                        id=parsed.external_id,
+                        external_id=parsed.external_id,
+                        provider_id=parsed.provider_id,
+                        title=parsed.title,
+                        company_name=parsed.company_name,
+                        location=parsed.location,
+                        apply_urls=parsed.apply_urls or [],
+                        description=parsed.description,
+                        posted_at=parsed.posted_at,
+                        skills_and_technologies=parsed.skills_and_technologies or [],
+                        responsibilities=parsed.responsibilities or [],
+                        job_types=parsed.job_types or [],
+                        qualifications=parsed.qualifications or [],
+                        benefits=parsed.benefits or [],
+                    ))
+                except Exception:
+                    pass
+        finally:
+            await r.aclose()
 
-    if not job:
-        return None
+    for j in db_jobs:
+        final_schemas.append(fast_map_db_to_schema(j))
 
-    return job
+    return final_schemas[:num_pages * 10]
 
 
-async def calculate_job_fit_score(
-    job_id: str,
-    current_user,
-) -> FitScoreResponse:
-    resume_data = fetch_resume_from_db(current_user.id)
+async def get_job_detail(job_id: str, current_user: Any = None) -> JobSchema | None:
+    def fetch():
+        with SessionLocal() as db:
+            return db.query(Job).filter(
+                (Job.external_id == job_id) | (Job.id == job_id)
+            ).first()
+
+    db_job = await asyncio.to_thread(fetch)
+
+    if db_job:
+        schema = JobSchema(
+            id=db_job.id,
+            external_id=db_job.external_id,
+            provider_id=db_job.provider_id,
+            title=db_job.title,
+            company_name=db_job.company_name,
+            company_website=db_job.company_website,
+            publisher=db_job.publisher,
+            location=db_job.location,
+            is_remote=db_job.is_remote,
+            posted_at=db_job.posted_at,
+            deadline=db_job.deadline,
+            salary=db_job.salary,
+            experience_level=db_job.experience_level,
+            apply_urls=db_job.apply_urls or [],
+            description=db_job.description,
+            llm_summary=db_job.llm_summary,
+            skills_and_technologies=db_job.skills_and_technologies or [],
+            responsibilities=db_job.responsibilities or [],
+            qualifications=db_job.qualifications or [],
+            benefits=db_job.benefits or [],
+            job_types=db_job.job_types or [],
+            metadata=db_job.job_metadata or {},
+        )
+
+        if current_user:
+            try:
+                resume_data = await asyncio.to_thread(fetch_resume_from_db, current_user.id)
+                candidate_resume = ResumeSchema(**resume_data)
+                profile = _job_to_profile(db_job)
+                # No cosine distance available in detail view — skill-only scoring
+                schema.fit_score = await compute_fit_score(profile=profile, candidate=candidate_resume)
+            except Exception as e:
+                print(f"[JobDetail] Fit score failed: {e}")
+
+        return schema
+
+    # Not in DB — check live Redis cache
+    import json
+    import redis.asyncio as aioredis
+    from app.core.config import settings
+    from app.providers.schemas import RawScrapedJob
+    from app.modules.jobs.services.jsearch_parser import parse_jsearch_to_schema
+
+    r = aioredis.from_url(settings.REDIS_URL)
+    try:
+        raw_data_str = await r.get(f"temp_job:{job_id}")
+    except Exception:
+        raw_data_str = None
+    finally:
+        await r.aclose()
+
+    if not raw_data_str:
+        raise ValueError(f"Job {job_id} not found in DB or live cache.")
+
+    print(f"[JobDetail] Found live job {job_id} in Redis cache. Parsing...")
+    raw_job = RawScrapedJob(**json.loads(raw_data_str))
+    parsed_schema = parse_jsearch_to_schema(raw_job)
+
+    if current_user:
+        try:
+            resume_data = await asyncio.to_thread(fetch_resume_from_db, current_user.id)
+            candidate_resume = ResumeSchema(**resume_data)
+            profile = _job_to_profile(parsed_schema)
+            parsed_schema.fit_score = await compute_fit_score(profile=profile, candidate=candidate_resume)
+        except Exception as e:
+            print(f"[JobDetail] Fit score for live job failed: {e}")
+
+    # Embed and persist the parsed job
+    try:
+        embedding_input = f"{parsed_schema.title} {parsed_schema.company_name} "
+        if parsed_schema.skills_and_technologies:
+            embedding_input += "Skills: " + ", ".join(parsed_schema.skills_and_technologies) + ". "
+        if parsed_schema.llm_summary:
+            embedding_input += parsed_schema.llm_summary
+        embedding_vector = await embed_text(embedding_input)
+    except Exception as e:
+        print(f"[JobDetail] Embedding failed: {e}. Saving without vector.")
+        embedding_vector = None
+
+    def save_live_job():
+        with SessionLocal() as db:
+            new_job = Job(
+                external_id=parsed_schema.external_id,
+                provider_id=parsed_schema.provider_id,
+                title=parsed_schema.title,
+                company_name=parsed_schema.company_name,
+                location=parsed_schema.location,
+                description=parsed_schema.description,
+                llm_summary=parsed_schema.llm_summary,
+                skills_and_technologies=parsed_schema.skills_and_technologies,
+                responsibilities=parsed_schema.responsibilities,
+                apply_urls=parsed_schema.apply_urls,
+                job_types=parsed_schema.job_types,
+                is_remote=parsed_schema.is_remote,
+                embedding=embedding_vector,
+            )
+            db.add(new_job)
+            db.commit()
+            db.refresh(new_job)
+            return new_job.id
+
+    try:
+        saved_id = await asyncio.to_thread(save_live_job)
+        parsed_schema.id = saved_id
+        print(f"[JobDetail] Live job {job_id} persisted to DB.")
+    except Exception as e:
+        print(f"[JobDetail] Failed to persist live job: {e}")
+
+    return parsed_schema
+
+
+async def calculate_job_fit_score(job_id: str, current_user) -> FitScoreResponse:
+    job_schema = await get_job_detail(job_id)
+    resume_data = await asyncio.to_thread(fetch_resume_from_db, current_user.id)
     candidate_resume = ResumeSchema(**resume_data)
 
-    job = await get_job_detail(job_id=job_id)
-
-    if not job:
-        raise ValueError("Job not found")
-
-    profile = await extract_job_requirement_profile(job)
-
-    fit_score = await compute_fit_score(
-        profile=profile,
-        candidate=candidate_resume,
-        add_reasoning=True,
+    profile = JobRequirementProfile(
+        summary=job_schema.llm_summary or "",
+        description=job_schema.description or "",
+        required_skills=job_schema.skills_and_technologies or [],
+        preferred_skills=[],
+        tools_and_technologies=job_schema.skills_and_technologies or [],
+        methodologies=[],
+        soft_skills=[],
+        responsibilities=job_schema.responsibilities or [],
+        qualifications=job_schema.qualifications or [],
+        benefits=job_schema.benefits or [],
+        required_experience_years=0,
+        seniority_level="",
+        job_function="",
+        industry="",
+        work_arrangement="Remote" if job_schema.is_remote else "Onsite",
+        education_requirements=[],
+        important_context="",
     )
 
-    return fit_score
+    return await compute_fit_score(profile=profile, candidate=candidate_resume, add_reasoning=True)
+
+
+async def get_user_preferences(user_id: str) -> dict:
+    def fetch():
+        with SessionLocal() as db:
+            pref = db.query(UserPreference).filter(UserPreference.user_id == user_id).first()
+            if not pref:
+                return {"id": "", "user_id": str(user_id), "job_types": []}
+            return {
+                "id": str(pref.id),
+                "user_id": str(pref.user_id),
+                "job_types": pref.job_types or [],
+            }
+
+    return await asyncio.to_thread(fetch)
+
+
+async def update_user_preferences(user_id: str, data: dict) -> dict:
+    """Update preferences. Generates preference embedding best-effort (never blocks the save)."""
+
+    def update_db():
+        with SessionLocal() as db:
+            pref = db.query(UserPreference).filter(UserPreference.user_id == user_id).first()
+            job_types = [v.value if hasattr(v, 'value') else v for v in (data.get("job_types") or [])]
+            if not pref:
+                pref = UserPreference(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    job_types=job_types,
+                )
+                db.add(pref)
+            else:
+                if "job_types" in data and data["job_types"] is not None:
+                    pref.job_types = job_types
+            db.commit()
+            db.refresh(pref)
+            return {
+                "id": str(pref.id),
+                "user_id": str(pref.user_id),
+                "job_types": pref.job_types or [],
+            }
+
+    result = await asyncio.to_thread(update_db)
+
+    # Generate preference embedding — best-effort, never fails the response
+    try:
+        job_types = [v.value if hasattr(v, 'value') else v for v in (data.get("job_types") or [])]
+        if job_types:
+            pref_text = "Preferred job types: " + ", ".join(job_types)
+            pref_vector = await embed_text(pref_text)
+
+            def save_embedding():
+                with SessionLocal() as db:
+                    pref = db.query(UserPreference).filter(UserPreference.user_id == user_id).first()
+                    if pref:
+                        pref.preference_embedding = pref_vector
+                        db.commit()
+
+            await asyncio.to_thread(save_embedding)
+            print(f"[Preferences] ✅ Preference embedding saved for user {user_id}.")
+    except Exception as e:
+        print(f"[Preferences] ⚠️ Embedding skipped: {e}. Preferences saved without vector signal.")
+
+    # Invalidate suggestion pool so next GET rebuilds with updated preference vector
+    try:
+        from app.modules.jobs.services.job_suggestion import async_invalidate_pool
+        await async_invalidate_pool(str(user_id))
+    except Exception as e:
+        print(f"[Preferences] Pool invalidation failed: {e}")
+
+    return result
