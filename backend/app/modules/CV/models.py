@@ -1,24 +1,28 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.session import Base
+from app.core.config import settings
+from pgvector.sqlalchemy import Vector
 
 
 class Resume(Base):
     __tablename__ = "resumes"
 
     id = Column(String, primary_key=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
 
     name = Column(String(255))
     email = Column(String(255))
     phone = Column(String(20))
     location = Column(String(255))
+    country = Column(String(255))
     years_of_experience = Column(Integer)
     raw_text = Column(Text)
+    embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
+    file_url = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -30,6 +34,18 @@ class Resume(Base):
     experience = relationship("ResumeExperience", back_populates="resume", cascade="all, delete-orphan")
     projects = relationship("ResumeProject", back_populates="resume", cascade="all, delete-orphan")
     certifications = relationship("ResumeCertification", back_populates="resume", cascade="all, delete-orphan")
+
+
+class CVUpload(Base):
+    __tablename__ = "cv_uploads"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    file_url = Column(Text, nullable=False)
+    storage_path = Column(Text, nullable=False)
+    original_filename = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=False, nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
 
 
 class ResumeSkill(Base):

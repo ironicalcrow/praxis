@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from uuid import UUID
+from typing import Optional
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+
+from app.modules.notifications.service import create_and_publish as notify
 
 from app.modules.application.db_service import (
     create_application_from_job_db,
@@ -13,7 +16,6 @@ from app.modules.application.db_service import (
     archive_application_db,
     delete_application_db,
 )
-
 from app.modules.application.schemas import (
     ApplicationCreation,
     ApplicationCreationManual,
@@ -32,23 +34,28 @@ router = APIRouter(
 )
 
 
-
-
-
 @router.post("/applications/from-job")
-def create_application_from_job(payload: ApplicationCreation):
+def create_application_from_job(payload: ApplicationCreation, background_tasks: BackgroundTasks):
     try:
-        return create_application_from_job_db(
+        result = create_application_from_job_db(
             user_id=payload.user_id,
             job_data=payload.job,
         )
+        company = payload.job.get("company_name", payload.job.get("company", ""))
+        title = payload.job.get("title", "Job")
+        background_tasks.add_task(
+            notify,
+            user_id=str(payload.user_id),
+            type="application_saved",
+            title="Job added to tracker",
+            message=f"\"{title}\" at {company} has been saved to your applications.",
+            data={"job_title": title, "company": company},
+        )
+        return result
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create application from job: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to create application from job: {str(e)}")
 
 
 @router.post("/applications/manual")
@@ -66,18 +73,16 @@ def create_manual_application(payload: ApplicationCreationManual):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create manual application: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to create manual application: {str(e)}")
 
 
 @router.get("/applications")
 def get_applications(
-    user_id: str = Query(...),
+    user_id: UUID = Query(...),
     status: Optional[str] = Query(None),
     include_archived: bool = Query(False),
 ):
+    user_id = str(user_id)
     try:
         return fetch_applications_from_db(
             user_id=user_id,
@@ -87,52 +92,66 @@ def get_applications(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch applications: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to fetch applications: {str(e)}")
 
 
 @router.get("/applications/kanban")
-def get_kanban_applications(user_id: str = Query(...)):
+def get_kanban_applications(user_id: UUID = Query(...)):
+    user_id = str(user_id)
     try:
         return fetch_kanban_applications_from_db(user_id=user_id)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch kanban applications: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to fetch kanban applications: {str(e)}")
+
+
+_STATUS_TITLES = {
+    "applied": ("Application submitted", "Your application has been marked as submitted."),
+    "interviewing": ("Interview stage reached!", "You've moved to the interview stage. Good luck!"),
+    "offer": ("Offer received!", "Congratulations — you've received an offer!"),
+    "rejected": ("Application update", "This application has been marked as rejected."),
+}
 
 
 @router.patch("/applications/{application_id}/status")
 def update_application_status(
-    application_id: str,
+    application_id: UUID,
     payload: UpdateStatusRequest,
+    background_tasks: BackgroundTasks,
 ):
-
+    application_id = str(application_id)
     try:
-        return update_application_status_db(
+        result = update_application_status_db(
             user_id=payload.user_id,
             application_id=application_id,
             new_status=payload.status,
             reason=payload.reason,
         )
+        status_lower = payload.status.lower()
+        if status_lower in _STATUS_TITLES:
+            title, message = _STATUS_TITLES[status_lower]
+            background_tasks.add_task(
+                notify,
+                user_id=str(payload.user_id),
+                type="application_status_changed",
+                title=title,
+                message=message,
+                data={"application_id": application_id, "new_status": payload.status},
+            )
+        return result
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update application status: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to update application status: {str(e)}")
 
 
 @router.post("/applications/{application_id}/notes")
 def add_application_note(
-    application_id: str,
+    application_id: UUID,
     payload: ApplicationNoteRequest,
 ):
+    application_id = str(application_id)
     try:
         return add_application_note_db(
             user_id=payload.user_id,
@@ -142,17 +161,15 @@ def add_application_note(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to add application note: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to add application note: {str(e)}")
 
 
 @router.patch("/notes/{note_id}")
 def update_application_note(
-    note_id: str,
+    note_id: UUID,
     payload: ApplicationNoteRequest,
 ):
+    note_id = str(note_id)
     try:
         return update_application_note_db(
             user_id=payload.user_id,
@@ -162,46 +179,34 @@ def update_application_note(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update application note: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to update application note: {str(e)}")
 
 
 @router.patch("/applications/{application_id}/archive")
 def archive_application(
-    application_id: str,
-    user_id: str = Query(...),
+    application_id: UUID,
+    user_id: UUID = Query(...),
 ):
-
+    application_id = str(application_id)
+    user_id = str(user_id)
     try:
-        return archive_application_db(
-            user_id=user_id,
-            application_id=application_id,
-        )
+        return archive_application_db(user_id=user_id, application_id=application_id)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to archive application: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to archive application: {str(e)}")
 
 
 @router.delete("/applications/{application_id}")
 def delete_application(
-    application_id: str,
-    user_id: str = Query(...),
+    application_id: UUID,
+    user_id: UUID = Query(...),
 ):
+    application_id = str(application_id)
+    user_id = str(user_id)
     try:
-        return delete_application_db(
-            user_id=user_id,
-            application_id=application_id,
-        )
+        return delete_application_db(user_id=user_id, application_id=application_id)
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete application: {str(e)}",
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete application: {str(e)}")

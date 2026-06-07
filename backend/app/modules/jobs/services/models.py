@@ -1,15 +1,10 @@
-import uuid
 from datetime import datetime
 
 from sqlalchemy import Column, String, Text, DateTime, Float, ForeignKey, JSON
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.session import Base
-
-
-def generate_uuid():
-    return str(uuid.uuid4())
+from app.core.utils import generate_uuid
 
 
 class JobFitScore(Base):
@@ -17,7 +12,7 @@ class JobFitScore(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
 
     fit_score = Column(Float, nullable=False)

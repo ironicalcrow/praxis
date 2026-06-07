@@ -50,7 +50,6 @@ Resume:
     try:
         content = await call_llm(
             messages=messages,
-            model="deepseek/deepseek-chat-v3-0324",
             temperature=0.0,
             json_mode=True,
         )

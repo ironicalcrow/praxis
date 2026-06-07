@@ -1,9 +1,11 @@
 import uuid
-from uuid import UUID as PyUUID
+from uuid import UUID as PyUUID, uuid4
+from datetime import datetime
+from typing import Optional
 
 from fastapi import HTTPException
 
-from app.core.session import get_session
+from app.core.session import get_session, SessionLocal
 from app.modules.CV.models import (
     Resume,
     ResumeSkill,
@@ -11,6 +13,7 @@ from app.modules.CV.models import (
     ResumeExperience,
     ResumeProject,
     ResumeCertification,
+    CVUpload,
 )
 from app.schemas import ResumeSchema
 
@@ -25,7 +28,7 @@ def parse_user_uuid(user_id: str):
         )
 
 
-def save_resume_to_db(parsed_resume: ResumeSchema, user_id: str):
+def save_resume_to_db(parsed_resume: ResumeSchema, user_id: str, file_url: Optional[str] = None):
 
     db = get_session()
 
@@ -43,8 +46,11 @@ def save_resume_to_db(parsed_resume: ResumeSchema, user_id: str):
             existing_resume.email = parsed_resume.email
             existing_resume.phone = parsed_resume.phone
             existing_resume.location = parsed_resume.location
+            existing_resume.country = parsed_resume.country
             existing_resume.years_of_experience = parsed_resume.years_of_experience
             existing_resume.raw_text = parsed_resume.raw_text
+            if file_url is not None:
+                existing_resume.file_url = file_url
 
             resume_id = existing_resume.id
 
@@ -64,8 +70,10 @@ def save_resume_to_db(parsed_resume: ResumeSchema, user_id: str):
                 email=parsed_resume.email,
                 phone=parsed_resume.phone,
                 location=parsed_resume.location,
+                country=parsed_resume.country,
                 years_of_experience=parsed_resume.years_of_experience,
                 raw_text=parsed_resume.raw_text,
+                file_url=file_url,
             )
 
             db.add(new_resume)
@@ -200,6 +208,7 @@ def fetch_resume_from_db(user_id: str):
             "email": resume.email,
             "phone": resume.phone,
             "location": resume.location,
+            "country": resume.country,
             "years_of_experience": resume.years_of_experience,
             "raw_text": resume.raw_text,
             "skills": [skill.skill for skill in skills],
@@ -231,6 +240,7 @@ def fetch_resume_from_db(user_id: str):
             "certifications": [
                 cert.certification for cert in certifications
             ],
+            "file_url": resume.file_url,
             "created_at": resume.created_at.isoformat() if resume.created_at else None,
             "updated_at": resume.updated_at.isoformat() if resume.updated_at else None,
         }
@@ -246,3 +256,81 @@ def fetch_resume_from_db(user_id: str):
 
     finally:
         db.close()
+
+def update_resume_embedding(resume_id: str, embedding: list[float]):
+    db = get_session()
+    try:
+        resume = db.query(Resume).filter(Resume.id == resume_id).first()
+        if resume:
+            resume.embedding = embedding
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Failed to save resume embedding: {e}")
+    finally:
+        db.close()
+
+
+def save_cv_upload_record(user_id: str, file_url: str, storage_path: str, original_filename: Optional[str]) -> str:
+    """Insert a new CVUpload row, mark it active, deactivate all previous ones."""
+    with SessionLocal() as db:
+        db.query(CVUpload).filter(CVUpload.user_id == user_id).update({"is_active": False})
+        record = CVUpload(
+            id=str(uuid4()),
+            user_id=user_id,
+            file_url=file_url,
+            storage_path=storage_path,
+            original_filename=original_filename,
+            is_active=True,
+            uploaded_at=datetime.utcnow(),
+        )
+        db.add(record)
+        db.commit()
+        return record.id
+
+
+def get_cv_upload_history(user_id: str) -> list:
+    with SessionLocal() as db:
+        records = (
+            db.query(CVUpload)
+            .filter(CVUpload.user_id == user_id)
+            .order_by(CVUpload.uploaded_at.desc())
+            .all()
+        )
+        return [
+            {
+                "id": r.id,
+                "file_url": r.file_url,
+                "storage_path": r.storage_path,
+                "original_filename": r.original_filename,
+                "is_active": r.is_active,
+                "uploaded_at": r.uploaded_at,
+            }
+            for r in records
+        ]
+
+
+def get_cv_upload_by_id(upload_id: str, user_id: str) -> Optional[dict]:
+    with SessionLocal() as db:
+        r = db.query(CVUpload).filter(
+            CVUpload.id == upload_id,
+            CVUpload.user_id == user_id,
+        ).first()
+        if not r:
+            return None
+        return {
+            "id": r.id,
+            "file_url": r.file_url,
+            "storage_path": r.storage_path,
+            "original_filename": r.original_filename,
+            "is_active": r.is_active,
+            "uploaded_at": r.uploaded_at,
+        }
+
+
+def set_active_cv_upload(upload_id: str, user_id: str):
+    """Deactivate all uploads for the user, then activate the chosen one."""
+    with SessionLocal() as db:
+        db.query(CVUpload).filter(CVUpload.user_id == user_id).update({"is_active": False})
+        db.query(CVUpload).filter(CVUpload.id == upload_id).update({"is_active": True})
+        db.commit()
