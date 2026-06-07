@@ -26,7 +26,7 @@ def pre_warm_cache_task(user_id: str):
     import asyncio
     from app.modules.CV.db_service import fetch_resume_from_db
     from app.modules.CV.schemas import ResumeSchema
-    from app.modules.jobs.services.job_suggestion import build_job_pool_from_queries
+    from app.modules.jobs.services.job_suggestion import build_suggestion_pool
     
     async def pre_warm():
         try:

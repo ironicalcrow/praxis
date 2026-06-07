@@ -7,10 +7,15 @@ ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
-    # LLM Settings (OpenAI-compatible)
+    # LLM Settings (OpenAI-compatible) — used for CV parsing, job queries
     LLM_API_KEY: str
     LLM_BASE_URL: str
     LLM_MODEL: str
+
+    # Chatbot Settings — used for chat, roadmap generation
+    CHATBOT_API_KEY: str
+    CHATBOT_BASE_URL: str
+    CHATBOT_LLM_MODEL: str
     
     # Embedding Settings
     EMBEDDING_API_KEY: str

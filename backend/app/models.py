@@ -17,6 +17,9 @@ from app.modules.application.models import (
     ApplicationStatusHistory,
     ApplicationNote,
 )
+from app.modules.chat.models import ChatConversation, ChatSession, ChatMessage
+from app.modules.roadmap.models import Roadmap, RoadmapPhase, RoadmapMilestone
+from app.modules.goals.models import Goal
 
 __all__ = [
     "Base",
@@ -34,4 +37,11 @@ __all__ = [
     "ApplicationStatus",
     "ApplicationStatusHistory",
     "ApplicationNote",
-]
+    "ChatConversation",
+    "ChatSession",
+    "ChatMessage",
+    "Roadmap",
+    "RoadmapPhase",
+    "RoadmapMilestone",
+    "Goal",
+]

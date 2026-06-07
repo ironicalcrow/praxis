@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime
 
 from sqlalchemy import (
@@ -11,23 +10,21 @@ from sqlalchemy import (
     ForeignKey,
     Float,
     Integer,
+    Table,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 
 from app.core.session import Base
-
-
-def generate_uuid():
-    return str(uuid.uuid4())
+from app.core.config import settings
+from app.core.utils import generate_uuid
 
 
 class UserPreference(Base):
     __tablename__ = "user_preferences"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), unique=True, nullable=False)
 
     job_types = Column(JSON, nullable=True)
     preference_embedding = Column(Vector(768), nullable=True)
@@ -36,14 +33,13 @@ class UserPreference(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-from sqlalchemy import Table
-
 search_query_jobs = Table(
     "search_query_jobs",
     Base.metadata,
     Column("search_query_id", String, ForeignKey("search_queries.id", ondelete="CASCADE"), primary_key=True),
-    Column("job_id", String, ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True)
+    Column("job_id", String, ForeignKey("jobs.id", ondelete="CASCADE"), primary_key=True),
 )
+
 
 class SearchQuery(Base):
     __tablename__ = "search_queries"
@@ -58,14 +54,12 @@ class SearchQuery(Base):
 
     jobs = relationship("Job", secondary=search_query_jobs, back_populates="search_queries")
 
+
 class JobQuery(Base):
     __tablename__ = "job_queries"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(String, primary_key=True, default=generate_uuid)
     search_query_id = Column(String, ForeignKey("search_queries.id", ondelete="CASCADE"), nullable=True)
-
-    # FIXED:
-    # Resume.id is String, so resume_id must also be String.
     resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
 
     query = Column(String(255), nullable=False)
@@ -103,16 +97,14 @@ class Job(Base):
 
     description = Column(Text, nullable=True)
     llm_summary = Column(Text, nullable=True)
-    
+
     skills_and_technologies = Column(JSON, nullable=True)
     responsibilities = Column(JSON, nullable=True)
     qualifications = Column(JSON, nullable=True)
     benefits = Column(JSON, nullable=True)
 
     job_metadata = Column(JSON, nullable=True)
-    
-    from app.core.config import settings
-    # Semantic Search Embedding
+
     embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -132,7 +124,7 @@ class JobFitScore(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
 
     fit_score = Column(Float, nullable=False)

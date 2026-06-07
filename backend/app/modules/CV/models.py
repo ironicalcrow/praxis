@@ -2,18 +2,17 @@ from datetime import datetime
 
 from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.session import Base
-from pgvector.sqlalchemy import Vector
 from app.core.config import settings
+from pgvector.sqlalchemy import Vector
 
 
 class Resume(Base):
     __tablename__ = "resumes"
 
     id = Column(String, primary_key=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True)
 
     name = Column(String(255))
     email = Column(String(255))
@@ -41,7 +40,7 @@ class CVUpload(Base):
     __tablename__ = "cv_uploads"
 
     id = Column(String, primary_key=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     file_url = Column(Text, nullable=False)
     storage_path = Column(Text, nullable=False)
     original_filename = Column(String(255), nullable=True)

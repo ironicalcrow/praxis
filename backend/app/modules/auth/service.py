@@ -1,25 +1,9 @@
-from uuid import UUID as PyUUID
-
 from fastapi import HTTPException
 
 from app.core.supabase import supabase
 from app.core.session import get_session
 from app.modules.auth.models import User
 from app.modules.auth.schemas import RegisterRequest, LoginRequest, AuthResponse
-
-
-def parse_user_uuid(user_id: str):
-    """
-    Convert Supabase/user string id into UUID object.
-    Needed because users.id is UUID(as_uuid=True).
-    """
-    try:
-        return PyUUID(str(user_id))
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid user_id. Expected UUID format.",
-        )
 
 
 class AuthService:
@@ -70,10 +54,8 @@ class AuthService:
                     detail="Registration failed",
                 )
 
-            user_uuid = parse_user_uuid(auth_response.user.id)
-
             new_user = User(
-                id=user_uuid,
+                id=str(auth_response.user.id),
                 name=payload.name,
                 username=payload.username,
                 email=payload.email,
@@ -158,11 +140,9 @@ class AuthService:
         db = get_session()
 
         try:
-            user_uuid = parse_user_uuid(user_id)
-
             user = (
                 db.query(User)
-                .filter(User.id == user_uuid)
+                .filter(User.id == str(user_id))
                 .first()
             )
 

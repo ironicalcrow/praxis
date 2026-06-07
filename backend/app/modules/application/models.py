@@ -1,16 +1,11 @@
 import enum
-import uuid
 from datetime import datetime
 
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean, Enum as SQLEnum
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.session import Base
-
-
-def generate_uuid():
-    return str(uuid.uuid4())
+from app.core.utils import generate_uuid
 
 
 class ApplicationStatus(str, enum.Enum):
@@ -26,7 +21,7 @@ class Application(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     job_id = Column(String, ForeignKey("jobs.id"), nullable=True)
 
     status = Column(
@@ -79,7 +74,7 @@ class ApplicationStatusHistory(Base):
     old_status = Column(SQLEnum(ApplicationStatus), nullable=True)
     new_status = Column(SQLEnum(ApplicationStatus), nullable=False)
 
-    changed_by_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    changed_by_user_id = Column(String, ForeignKey("users.id"), nullable=True)
     reason = Column(Text, nullable=True)
 
     changed_at = Column(DateTime, default=datetime.utcnow)
@@ -93,7 +88,7 @@ class ApplicationNote(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
 
     application_id = Column(String, ForeignKey("applications.id"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
 
     content = Column(Text, nullable=False)
 
