@@ -6,7 +6,7 @@ from app.modules.auth.route import router as auth_router
 from app.modules.application.route import router as application_router
 api_router = APIRouter(prefix="/api")
 
-api_router.include_router(jobs_router)
-api_router.include_router(cv_router, prefix="/cv",tags=["CV"])
 api_router.include_router(auth_router)
+api_router.include_router(cv_router, prefix="/cv",tags=["CV"])
+api_router.include_router(jobs_router)
 api_router.include_router(application_router)
