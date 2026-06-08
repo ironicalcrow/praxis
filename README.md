@@ -23,59 +23,151 @@ Praxis is an AI-powered career management platform built for the Codesprint 2026
 
 ## Setup Instructions
 
-1. Navigate to the `backend` directory:
-   ```bash
-   cd backend
-   ```
+### 1. Backend Setup
 
-2. Create and activate a virtual environment (optional but recommended):
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
+Navigate to the `backend` directory:
 
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+cd backend
+```
 
-4. Configure Environment Variables. Create a `.env` file in the `backend` directory with the following keys:
--SUPABASE_URL=
--SUPABASE_ANON_KEY=
--SUPABASE_SERVICE_ROLE_KEY=
--SUPABASE_STORAGE_BUCKET=cvs
+Create and activate a virtual environment:
 
--DATABASE_URL=
+```bash
+python -m venv .venv
+```
 
--REDIS_URL=
+For macOS/Linux:
 
--LLM_FALLBACK_API_KEY=
--LLM_FALLBACK_BASE_URL=https://api.groq.com/openai/v1
--LLM_FALLBACK_MODEL=llama-3.3-70b-versatile
+```bash
+source .venv/bin/activate
+```
 
--CHATBOT_FALLBACK_API_KEY=
--CHATBOT_FALLBACK_BASE_URL=https://api.groq.com/openai/v1
--CHATBOT_FALLBACK_MODEL=llama-3.3-70b-versatile
+For Windows:
 
--EMBEDDING_FALLBACK_API_KEY=
--EMBEDDING_FALLBACK_BASE_URL=https://api.jina.ai/v1
--EMBEDDING_FALLBACK_MODEL=jina-embeddings-v2-base-en
+```bash
+.venv\Scripts\activate
+```
 
-5. Run the database migrations (if any) or ensure the DB is setup. The backend automatically creates tables on startup if `Base.metadata.create_all` is enabled.
+Install dependencies:
 
-6. Run the FastAPI development server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+```bash
+pip install -r requirements.txt
+```
 
-7. Run the background worker for cron tasks and background jobs in a separate terminal:
-   ```bash
-   arq app.core.worker.WorkerSettings
-   ```
+### 2. Configure Backend Environment Variables
+
+Create a `.env` file inside the `backend` directory:
+
+```env
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_STORAGE_BUCKET=cvs
+
+DATABASE_URL=
+
+REDIS_URL=
+
+LLM_FALLBACK_API_KEY=
+LLM_FALLBACK_BASE_URL=https://api.groq.com/openai/v1
+LLM_FALLBACK_MODEL=llama-3.3-70b-versatile
+
+CHATBOT_FALLBACK_API_KEY=
+CHATBOT_FALLBACK_BASE_URL=https://api.groq.com/openai/v1
+CHATBOT_FALLBACK_MODEL=llama-3.3-70b-versatile
+
+EMBEDDING_FALLBACK_API_KEY=
+EMBEDDING_FALLBACK_BASE_URL=https://api.jina.ai/v1
+EMBEDDING_FALLBACK_MODEL=jina-embeddings-v2-base-en
+```
+
+### 3. Database Setup
+
+Run database migrations if migrations are configured.
+
+If migrations are not used, ensure the database is running and the backend can connect to it. The backend automatically creates tables on startup if `Base.metadata.create_all` is enabled.
+
+### 4. Run the Backend Server
+
+Start the FastAPI development server:
+
+```bash
+uvicorn main:app --reload
+```
+
+The backend will run at:
+
+```text
+http://localhost:8000
+```
+
+Swagger API documentation will be available at:
+
+```text
+http://localhost:8000/docs
+```
+
+### 5. Run the Background Worker
+
+In a separate terminal, go to the `backend` directory and activate the virtual environment again.
+
+Then run:
+
+```bash
+arq app.core.worker.WorkerSettings
+```
+
+---
+
+## Frontend Setup
+
+### 1. Navigate to the Frontend Directory
+
+From the project root:
+
+```bash
+cd frontend
+```
+
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure Frontend Environment Variables
+
+Create a `.env` file inside the `frontend` directory:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+### 4. Run the React Development Server
+
+```bash
+npm run dev
+```
+
+The frontend will usually run at:
+
+```text
+http://localhost:5173
+```
+
+Make sure the backend server is running at:
+
+```text
+http://localhost:8000
+```
+
+---
 
 ## Testing
 
 To run the evaluation suite:
+
 ```bash
 pytest
 ```
