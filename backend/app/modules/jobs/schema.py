@@ -86,7 +86,6 @@ class JobSchema(BaseModel):
     apply_urls: list[str] = Field(default_factory=list)
     
     description: Optional[str] = None
-    llm_summary: Optional[str] = None
     skills_and_technologies: list[str] = Field(default_factory=list)
     responsibilities: list[str] = Field(default_factory=list)
     qualifications: list[str] = Field(default_factory=list)

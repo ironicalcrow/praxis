@@ -95,7 +95,6 @@ class Job(Base):
     apply_urls = Column(JSON, nullable=True)
 
     description = Column(Text, nullable=True)
-    llm_summary = Column(Text, nullable=True)
 
     skills_and_technologies = Column(JSON, nullable=True)
     responsibilities = Column(JSON, nullable=True)

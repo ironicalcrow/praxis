@@ -40,7 +40,7 @@ def _offset_key(user_id: str) -> str:
 def _job_to_profile(job) -> JobRequirementProfile:
     skills = list(job.skills_and_technologies or []) if hasattr(job, 'skills_and_technologies') else []
     return JobRequirementProfile(
-        summary=getattr(job, 'llm_summary', None) or "",
+        summary=getattr(job, 'description', None) or "",
         description=getattr(job, 'description', None) or "",
         required_skills=skills,
         preferred_skills=[],
@@ -234,7 +234,7 @@ async def build_suggestion_pool(
             posted_at=db_job.posted_at,
             apply_urls=db_job.apply_urls or [],
             description=db_job.description,
-            llm_summary=db_job.llm_summary,
+
             skills_and_technologies=db_job.skills_and_technologies or [],
             responsibilities=db_job.responsibilities or [],
             job_types=db_job.job_types or [],

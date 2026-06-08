@@ -39,7 +39,6 @@ def _save_job_to_db(schema, vector, search_query_id):
                 company_name=schema.company_name,
                 location=schema.location,
                 description=schema.description,
-                llm_summary=schema.llm_summary,
                 salary=schema.salary,
                 experience_level=schema.experience_level,
                 posted_at=schema.posted_at,
@@ -82,8 +81,8 @@ async def _process_and_save_job(raw_job, r, sem) -> None:
             embedding_input = f"{job_schema.title} {job_schema.company_name} "
             if job_schema.skills_and_technologies:
                 embedding_input += "Skills: " + ", ".join(job_schema.skills_and_technologies) + ". "
-            if job_schema.llm_summary:
-                embedding_input += job_schema.llm_summary
+            if job_schema.description:
+                embedding_input += job_schema.description[:300]
 
             try:
                 embedding_vector = await embed_text(embedding_input)

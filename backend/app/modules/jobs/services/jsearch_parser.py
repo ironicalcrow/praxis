@@ -98,9 +98,6 @@ def parse_jsearch_to_schema(raw_job: RawScrapedJob) -> JobSchema:
     full_text_for_skills = f"{description}\n" + "\n".join(qualifications)
     skills = extract_skills_from_text(full_text_for_skills)
     
-    # We create llm_summary by taking the first 300 chars of the description programmatically
-    summary = description[:300] + "..." if len(description) > 300 else description
-
     return JobSchema(
         external_id=raw_job.job_id,
         provider_id=raw_job.provider_id,
@@ -116,7 +113,6 @@ def parse_jsearch_to_schema(raw_job: RawScrapedJob) -> JobSchema:
         salary=salary_str,
         apply_urls=apply_urls,
         description=description,
-        llm_summary=summary,
         skills_and_technologies=skills,
         responsibilities=responsibilities,
         qualifications=qualifications,

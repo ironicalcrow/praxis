@@ -17,7 +17,7 @@ from app.core.llm_caller import embed_text
 def _job_to_profile(job) -> JobRequirementProfile:
     skills = list(job.skills_and_technologies or []) if hasattr(job, 'skills_and_technologies') else []
     return JobRequirementProfile(
-        summary=getattr(job, 'llm_summary', None) or "",
+        summary=getattr(job, 'description', None) or "",
         description=getattr(job, 'description', None) or "",
         required_skills=skills,
         preferred_skills=[],
@@ -39,7 +39,6 @@ def fast_map_db_to_schema(db_job: Job) -> JobSchema:
         posted_at=db_job.posted_at,
         apply_urls=db_job.apply_urls or [],
         description=db_job.description,
-        llm_summary=db_job.llm_summary,
         skills_and_technologies=db_job.skills_and_technologies or [],
         responsibilities=db_job.responsibilities or [],
         job_types=db_job.job_types or [],
@@ -99,13 +98,12 @@ async def search_live_jobs(
                     db.delete(evicted)
 
                 db.add(JobQuery(
-                    id=uuid.uuid4(),
-                    resume_id=uuid.UUID(resume_id),
+                    id=str(uuid.uuid4()),
+                    resume_id=str(resume_id),
                     search_query_id=sq_id,
                     query=query,
                     reason="user searched",
                     priority=10,
-                    remote_jobs_only=remote_jobs_only,
                 ))
             else:
                 existing.priority = 10
@@ -168,6 +166,8 @@ async def search_live_jobs(
                     q = q.filter(Job.location.ilike(f"%{location}%"))
                 if country and country != "any":
                     q = q.filter(Job.location.ilike(f"%{country}%"))
+                if remote_jobs_only:
+                    q = q.filter(Job.is_remote == True)
                 limit = num_pages * 10
                 offset = (page - 1) * 10
                 return q.order_by(Job.embedding.cosine_distance(vector)).offset(offset).limit(limit).all()
@@ -258,7 +258,6 @@ async def get_job_detail(job_id: str, current_user: Any = None) -> JobSchema | N
             experience_level=db_job.experience_level,
             apply_urls=db_job.apply_urls or [],
             description=db_job.description,
-            llm_summary=db_job.llm_summary,
             skills_and_technologies=db_job.skills_and_technologies or [],
             responsibilities=db_job.responsibilities or [],
             qualifications=db_job.qualifications or [],
@@ -315,8 +314,8 @@ async def get_job_detail(job_id: str, current_user: Any = None) -> JobSchema | N
         embedding_input = f"{parsed_schema.title} {parsed_schema.company_name} "
         if parsed_schema.skills_and_technologies:
             embedding_input += "Skills: " + ", ".join(parsed_schema.skills_and_technologies) + ". "
-        if parsed_schema.llm_summary:
-            embedding_input += parsed_schema.llm_summary
+        if parsed_schema.description:
+            embedding_input += parsed_schema.description[:300]
         embedding_vector = await embed_text(embedding_input)
     except Exception as e:
         print(f"[JobDetail] Embedding failed: {e}. Saving without vector.")
@@ -331,7 +330,6 @@ async def get_job_detail(job_id: str, current_user: Any = None) -> JobSchema | N
                 company_name=parsed_schema.company_name,
                 location=parsed_schema.location,
                 description=parsed_schema.description,
-                llm_summary=parsed_schema.llm_summary,
                 skills_and_technologies=parsed_schema.skills_and_technologies,
                 responsibilities=parsed_schema.responsibilities,
                 apply_urls=parsed_schema.apply_urls,
@@ -360,7 +358,7 @@ async def calculate_job_fit_score(job_id: str, current_user) -> FitScoreResponse
     candidate_resume = ResumeSchema(**resume_data)
 
     profile = JobRequirementProfile(
-        summary=job_schema.llm_summary or "",
+        summary=job_schema.description or "",
         description=job_schema.description or "",
         required_skills=job_schema.skills_and_technologies or [],
         preferred_skills=[],
