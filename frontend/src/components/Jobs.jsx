@@ -162,7 +162,7 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
             {(onAddToApply || onRemove) && (
               jobStatus?.in_tracker ? (
                 <>
-                  <Badge color="#22c55e">✓ In Applications Board</Badge>
+                  <Badge color="#22c55e">✓ Saved to Board</Badge>
                   {onRemove && jobStatus.application_id && (
                     <Btn size="sm" variant="ghost"
                       onClick={() => { onRemove(jobStatus.application_id, job.id); onClose() }}>
@@ -297,7 +297,7 @@ export default function Jobs({ onSelectJob }) {
       const resolvedJobId = app.job_id || jobId
       const appId = app.application_id || app.id
       setSavedMap(m => new Map(m).set(resolvedJobId, appId))
-      setMsg('Added to your Applications! Manage status from the Applications board.')
+      setMsg('Job saved! Change status to Applied from the Applications board.')
       setTimeout(() => setMsg(''), 4000)
     } catch (e) {
       if (e.message?.includes('409') || e.message?.toLowerCase().includes('already exists')) {

@@ -51,7 +51,7 @@ export default function Roadmaps() {
     setLoading(true)
     try {
       const res = await goalsApi.fromRoadmap(id)
-      setMsg(`Created ${res.goals?.length || 0} goals from roadmap!`)
+      setMsg(`Created ${Array.isArray(res) ? res.length : (res.goals?.length || 0)} goals from roadmap!`)
     } catch (e) { setErr(e.message) }
     finally { setLoading(false) }
   }

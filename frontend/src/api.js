@@ -27,6 +27,7 @@ async function req(path, opts = {}) {
     try { const d = await res.json(); msg = d.detail || JSON.stringify(d) } catch {}
     throw new Error(msg)
   }
+  if (res.status === 204) return null
   const ct = res.headers.get('content-type') || ''
   if (ct.includes('json')) return res.json()
   return res.text()

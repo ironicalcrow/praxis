@@ -172,20 +172,7 @@ def create_application_from_job_db(user_id: str, job_data: dict):
         )
 
         if existing:
-            if existing.status == ApplicationStatus.SAVED:
-                existing.status = ApplicationStatus.APPLIED
-                existing.last_status_changed_at = datetime.utcnow()
-                create_application_status_history_to_db(
-                    db=db,
-                    application_id=existing.id,
-                    old_status=ApplicationStatus.SAVED,
-                    new_status=ApplicationStatus.APPLIED,
-                    user_id=user_id,
-                )
-                db.commit()
-                return {"application_id": existing.id, "job_id": job.id, "message": "Application promoted to applied"}
-            else:
-                raise HTTPException(status_code=409, detail="Application already exists for this job")
+            raise HTTPException(status_code=409, detail="Application already exists for this job")
 
         apply_url = (job.apply_urls[0] if job.apply_urls else None)
         application = create_application_to_db(
@@ -197,7 +184,7 @@ def create_application_from_job_db(user_id: str, job_data: dict):
             location=job.location,
             apply_url=apply_url,
             salary=job.salary,
-            status=ApplicationStatus.APPLIED,
+            status=ApplicationStatus.SAVED,
         )
 
         db.commit()
