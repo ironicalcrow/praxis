@@ -17,6 +17,7 @@ class MilestoneOut(BaseModel):
     order_index: int
     estimated_days: Optional[int] = None
     suggested_target_days: Optional[int] = None
+    key_skill: Optional[str] = None
 
     class Config:
         from_attributes = True

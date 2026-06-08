@@ -31,6 +31,7 @@ class Goal(Base):
     )
 
     target_date = Column(Date, nullable=True)
+    key_skill = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

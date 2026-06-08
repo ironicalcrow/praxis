@@ -79,6 +79,7 @@ def create_goals_from_milestones(
             milestone_id=milestone.id,
             status="not_started",
             target_date=target,
+            key_skill=milestone.key_skill,
         )
         db.add(goal)
         goals.append(goal)

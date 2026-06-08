@@ -63,7 +63,6 @@ class JobQuery(Base):
     resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
 
     query = Column(String(255), nullable=False)
-    remote_jobs_only = Column(Boolean, nullable=True)
     reason = Column(String(500))
     priority = Column(Integer)
     added_at = Column(DateTime, default=datetime.utcnow)

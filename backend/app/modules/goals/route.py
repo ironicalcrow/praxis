@@ -131,7 +131,19 @@ def update_goal(
             message=f"You completed \"{goal.title}\". Keep up the momentum!",
             data={"goal_id": goal.id},
         )
+        if goal.key_skill:
+            background_tasks.add_task(_on_goal_completed, str(current_user.id), goal.key_skill)
     return goal
+
+
+async def _on_goal_completed(user_id: str, key_skill: str) -> None:
+    from app.modules.CV.db_service import add_skill_if_missing, refresh_cv_embedding_for_user
+    resume_id = add_skill_if_missing(user_id, key_skill)
+    if resume_id:
+        await refresh_cv_embedding_for_user(user_id)
+        print(f"[Goals] CV skill '{key_skill}' added and embedding refreshed for user {user_id}")
+    else:
+        print(f"[Goals] CV skill '{key_skill}' already present or no CV found for user {user_id}")
 
 
 @router.delete("/{goal_id}", status_code=204)

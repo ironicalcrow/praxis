@@ -140,7 +140,7 @@ async def get_queries(current_user=Depends(get_current_user)):
         with SessionLocal() as db:
             queries = (
                 db.query(JobQuery)
-                .filter(JobQuery.resume_id == resume_id)
+                .filter(JobQuery.resume_id == str(resume_id))
                 .order_by(JobQuery.priority.desc(), JobQuery.added_at.desc())
                 .all()
             )

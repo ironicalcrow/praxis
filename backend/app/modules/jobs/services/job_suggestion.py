@@ -78,7 +78,7 @@ async def build_suggestion_pool(
         from app.modules.CV.models import Resume
         with SessionLocal() as db:
             pref = db.query(UserPreference).filter(UserPreference.user_id == user_id).first()
-            resume = db.query(Resume).filter(Resume.user_id == user_id).first()
+            resume = db.query(Resume).filter(Resume.user_id == str(user_id)).first()
             return (
                 pref,
                 list(resume.embedding) if resume and resume.embedding is not None else None,

@@ -86,7 +86,7 @@ async def search_live_jobs(
 
             user_queries = (
                 db.query(JobQuery)
-                .filter(JobQuery.resume_id == resume_id)
+                .filter(JobQuery.resume_id == str(resume_id))
                 .order_by(JobQuery.priority.desc(), JobQuery.added_at.asc())
                 .all()
             )

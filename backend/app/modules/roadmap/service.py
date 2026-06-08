@@ -36,7 +36,8 @@ _ROADMAP_JSON_SCHEMA = (
     '"milestones": ['
     '{"title": "Learn/Build <specific skill or deliverable>", '
     '"description": "Skill: <exact skill/technology>. Practice: <concrete exercise or mini-project to build>. Outcome: <what you can do after>.", '
-    '"resource_url": null, "order_index": 1, "estimated_days": 7}'
+    '"resource_url": null, "order_index": 1, "estimated_days": 7, '
+    '"key_skill": "FastAPI"}'
     "]}"
     "]}"
 )
@@ -48,6 +49,10 @@ _ROADMAP_SYSTEM = (
     "(2) include a concrete hands-on practice exercise or mini-project the learner will build; "
     "(3) state a clear outcome — what the learner can do or demonstrate after completing it. "
     "Milestones must be practical and verifiable, not vague (BAD: 'Improve Python skills'; GOOD: 'Build a CLI task manager using Click and pytest'). "
+    "RULES FOR key_skill — set key_skill to the single canonical technology or skill noun the milestone teaches "
+    "(e.g. 'FastAPI', 'Docker', 'React Hooks', 'PostgreSQL'). "
+    "It must be a bare noun — never a sentence, never a phrase like 'learned X' or 'improved Y'. "
+    "Set key_skill to null ONLY for non-skill milestones (e.g. 'Update resume', 'Apply to jobs'). "
     "Return ONLY valid JSON — no markdown, no explanation. "
     f"Schema:\n{_ROADMAP_JSON_SCHEMA}"
 )

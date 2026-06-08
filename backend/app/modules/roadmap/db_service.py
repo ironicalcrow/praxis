@@ -48,6 +48,7 @@ def create_roadmap(
                 order_index=m_data.get("order_index", j),
                 estimated_days=m_data.get("estimated_days"),
                 suggested_target_days=m_data.get("suggested_target_days"),
+                key_skill=m_data.get("key_skill"),
             )
             db.add(milestone)
 

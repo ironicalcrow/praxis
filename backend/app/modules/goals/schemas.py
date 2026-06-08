@@ -29,6 +29,7 @@ class GoalOut(BaseModel):
     roadmap_id: Optional[str] = None
     milestone_id: Optional[str] = None
     target_date: Optional[date] = None
+    key_skill: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

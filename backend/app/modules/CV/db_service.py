@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from uuid import UUID as PyUUID, uuid4
 from datetime import datetime
@@ -37,7 +38,7 @@ def save_resume_to_db(parsed_resume: ResumeSchema, user_id: str, file_url: Optio
 
         existing_resume = (
             db.query(Resume)
-            .filter(Resume.user_id == user_uuid)
+            .filter(Resume.user_id == str(user_uuid))
             .first()
         )
 
@@ -161,7 +162,7 @@ def fetch_resume_from_db(user_id: str):
 
         resume = (
             db.query(Resume)
-            .filter(Resume.user_id == user_uuid)
+            .filter(Resume.user_id == str(user_uuid))
             .first()
         )
 
@@ -334,3 +335,54 @@ def set_active_cv_upload(upload_id: str, user_id: str):
         db.query(CVUpload).filter(CVUpload.user_id == user_id).update({"is_active": False})
         db.query(CVUpload).filter(CVUpload.id == upload_id).update({"is_active": True})
         db.commit()
+
+
+def add_skill_if_missing(user_id: str, skill_name: str) -> Optional[str]:
+    """
+    Add skill_name to resume_skills if not already present (case-insensitive).
+    Returns resume_id if skill was newly added, None if already exists or no resume found.
+    """
+    with SessionLocal() as db:
+        resume = db.query(Resume).filter(Resume.user_id == str(user_id)).first()
+        if not resume:
+            return None
+        existing = (
+            db.query(ResumeSkill)
+            .filter(ResumeSkill.resume_id == resume.id, ResumeSkill.skill.ilike(skill_name))
+            .first()
+        )
+        if existing:
+            return None
+        db.add(ResumeSkill(id=str(uuid.uuid4()), resume_id=resume.id, skill=skill_name))
+        db.commit()
+        return resume.id
+
+
+async def refresh_cv_embedding_for_user(user_id: str) -> None:
+    """Re-embed the CV for a user after skill changes. Best-effort — never raises."""
+    try:
+        from app.core.llm_caller import embed_text
+        resume_data = fetch_resume_from_db(user_id)
+        resume_id = resume_data["id"]
+        skills = resume_data.get("skills") or []
+        raw = resume_data.get("raw_text") or ""
+        loc = resume_data.get("location") or ""
+        exp_list = resume_data.get("experience") or []
+
+        resume_text = ""
+        if loc:
+            resume_text += f"Location: {loc}. "
+        resume_text += "Skills: " + ", ".join(skills) + ". "
+        if raw:
+            resume_text += raw[:500] + "... "
+        for exp in exp_list:
+            role = exp.get("role", "")
+            org = exp.get("organization", "")
+            desc = exp.get("description", "")
+            resume_text += f"{role} at {org}: {desc}. "
+
+        vector = await embed_text(resume_text)
+        await asyncio.to_thread(update_resume_embedding, resume_id, vector)
+        print(f"[CV] ✅ Embedding refreshed for user {user_id}")
+    except Exception as e:
+        print(f"[CV] ⚠️ refresh_cv_embedding_for_user failed: {e}")

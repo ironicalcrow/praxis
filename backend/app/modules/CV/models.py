@@ -67,7 +67,7 @@ class ResumeEducation(Base):
     degree = Column(String(255))
     institution = Column(String(255))
     year = Column(String(20))
-    gpa = Column(String(10))
+    gpa = Column(String(50))
 
     resume = relationship("Resume", back_populates="education")
 

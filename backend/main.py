@@ -27,8 +27,17 @@ app = FastAPI(title="PRAXIS")
 
 @app.on_event("startup")
 def on_startup():
+    from sqlalchemy import text
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        conn.execute(text(
+            "ALTER TABLE roadmap_milestones ADD COLUMN IF NOT EXISTS key_skill VARCHAR"
+        ))
+        conn.execute(text(
+            "ALTER TABLE goals ADD COLUMN IF NOT EXISTS key_skill VARCHAR"
+        ))
+        conn.commit()
 
 
 app.add_middleware(

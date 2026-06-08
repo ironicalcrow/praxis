@@ -71,6 +71,7 @@ class RoadmapMilestone(Base):
     order_index = Column(Integer, nullable=False, default=0)
     estimated_days = Column(Integer, nullable=True)
     suggested_target_days = Column(Integer, nullable=True)
+    key_skill = Column(String, nullable=True)
 
     phase = relationship("RoadmapPhase", back_populates="milestones")
     goals = relationship("Goal", back_populates="milestone")
