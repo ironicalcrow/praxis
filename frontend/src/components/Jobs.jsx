@@ -7,22 +7,22 @@ import { Card, Btn, Input, Alert, Badge, Row, SectionTitle, Spinner } from './ui
 export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, onAddToApply, onRemove }) {
   if (!job) return null
   const score = job.fit_score?.fit_score
-  const scoreColor = score >= 70 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)'
+  const scoreColor = score >= 70 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      style={{ position: 'fixed', inset: 0, background: '#000000bb', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={onClose}
     >
       <div
-        style={{ background: 'var(--bg-app)', border: '1px solid var(--border-strong)', borderRadius: 12, padding: 24, maxWidth: 660, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
+        style={{ background: '#1a1a2e', border: '1px solid #4f46e5', borderRadius: 12, padding: 24, maxWidth: 660, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
       >
         {/* ── Header ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
           <div style={{ flex: 1 }}>
-            <h3 style={{ color: 'var(--text-main)', margin: '0 0 4px', fontSize: 18 }}>{job.title}</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: 0 }}>
+            <h3 style={{ color: '#e2e8f0', margin: '0 0 4px', fontSize: 18 }}>{job.title}</h3>
+            <p style={{ color: '#94a3b8', fontSize: 14, margin: 0 }}>
               {[job.company_name, job.location, job.experience_level].filter(Boolean).join(' · ')}
             </p>
           </div>
@@ -35,47 +35,47 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
         {/* ── Tracker / CV / Chat badges ── */}
         {jobStatus && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-            {jobStatus.in_tracker && <Badge color="var(--success)">✓ In Tracker</Badge>}
-            {jobStatus.has_cover_letter && <Badge color="var(--primary)">Cover Letter</Badge>}
-            {jobStatus.has_chat && <Badge color="var(--accent)">Has Chat</Badge>}
+            {jobStatus.in_tracker && <Badge color="#22c55e">✓ In Tracker</Badge>}
+            {jobStatus.has_cover_letter && <Badge color="#6366f1">Cover Letter</Badge>}
+            {jobStatus.has_chat && <Badge color="#a78bfa">Has Chat</Badge>}
           </div>
         )}
 
         {/* ── Salary + Job types ── */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {job.salary && <Badge color="var(--success)">{job.salary}</Badge>}
-          {job.is_remote && <Badge color="var(--info)">Remote</Badge>}
-          {(job.job_types || []).map(t => <Badge key={t} color="var(--primary)">{t}</Badge>)}
-          {job.publisher && <Badge color="var(--text-muted)">{job.publisher}</Badge>}
+          {job.salary && <Badge color="#22c55e">{job.salary}</Badge>}
+          {job.is_remote && <Badge color="#3b82f6">Remote</Badge>}
+          {(job.job_types || []).map(t => <Badge key={t} color="#6366f1">{t}</Badge>)}
+          {job.publisher && <Badge color="#475569">{job.publisher}</Badge>}
         </div>
 
         {/* ── Dates ── */}
         {(job.posted_at || job.deadline) && (
-          <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+          <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12, color: '#64748b' }}>
             {job.posted_at && <span>Posted: {new Date(job.posted_at).toLocaleDateString()}</span>}
-            {job.deadline && <span style={{ color: 'var(--warning)' }}>⚠ Deadline: {new Date(job.deadline).toLocaleDateString()}</span>}
+            {job.deadline && <span style={{ color: '#f59e0b' }}>⚠ Deadline: {new Date(job.deadline).toLocaleDateString()}</span>}
           </div>
         )}
 
         {/* ── Fit Score ── */}
         {job.fit_score && (
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '12px 16px', marginTop: 14 }}>
+          <div style={{ background: '#0f0f1a', borderRadius: 8, padding: '12px 16px', marginTop: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
               <span style={{ fontSize: 32, fontWeight: 800, color: scoreColor, lineHeight: 1 }}>
                 {Math.round(score)}%
               </span>
-              <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>{job.fit_score.verdict}</span>
+              <span style={{ color: '#94a3b8', fontSize: 14 }}>{job.fit_score.verdict}</span>
             </div>
             {job.fit_score.strengths?.length > 0 && (
               <p style={{ margin: '3px 0', fontSize: 12 }}>
-                <span style={{ color: 'var(--success)', fontWeight: 600 }}>✓ Matched: </span>
-                <span style={{ color: 'var(--text-muted)' }}>{job.fit_score.strengths.slice(0, 7).join(', ')}</span>
+                <span style={{ color: '#22c55e', fontWeight: 600 }}>✓ Matched: </span>
+                <span style={{ color: '#94a3b8' }}>{job.fit_score.strengths.slice(0, 7).join(', ')}</span>
               </p>
             )}
             {job.fit_score.weaknesses?.length > 0 && (
               <p style={{ margin: '3px 0', fontSize: 12 }}>
-                <span style={{ color: 'var(--danger)', fontWeight: 600 }}>✗ Missing: </span>
-                <span style={{ color: 'var(--text-muted)' }}>{job.fit_score.weaknesses.slice(0, 7).join(', ')}</span>
+                <span style={{ color: '#ef4444', fontWeight: 600 }}>✗ Missing: </span>
+                <span style={{ color: '#94a3b8' }}>{job.fit_score.weaknesses.slice(0, 7).join(', ')}</span>
               </p>
             )}
           </div>
@@ -84,10 +84,10 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
         {/* ── Skills ── */}
         {job.skills_and_technologies?.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 7, textTransform: 'uppercase', letterSpacing: 0.5 }}>Skills & Technologies</p>
+            <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 7, textTransform: 'uppercase', letterSpacing: 0.5 }}>Skills & Technologies</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {job.skills_and_technologies.map(s => (
-                <span key={s} style={{ background: 'var(--bg-app)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '3px 9px', fontSize: 11, color: 'var(--primary)' }}>{s}</span>
+                <span key={s} style={{ background: '#1e1e3a', border: '1px solid #2d2d4e', borderRadius: 4, padding: '3px 9px', fontSize: 11, color: '#a5b4fc' }}>{s}</span>
               ))}
             </div>
           </div>
@@ -96,8 +96,8 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
         {/* ── Description ── */}
         {job.description && (
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>About the Role</p>
-            <p style={{ fontSize: 13, color: 'var(--text-main)', lineHeight: 1.7, margin: 0 }}>
+            <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>About the Role</p>
+            <p style={{ fontSize: 13, color: '#cbd5e1', lineHeight: 1.7, margin: 0 }}>
               {job.description.slice(0, 700)}{job.description.length > 700 ? '…' : ''}
             </p>
           </div>
@@ -106,10 +106,10 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
         {/* ── Responsibilities ── */}
         {job.responsibilities?.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Responsibilities</p>
+            <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Responsibilities</p>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {job.responsibilities.slice(0, 7).map((r, i) => (
-                <li key={i} style={{ fontSize: 13, color: 'var(--text-main)', marginBottom: 4, lineHeight: 1.5 }}>{r}</li>
+                <li key={i} style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 4, lineHeight: 1.5 }}>{r}</li>
               ))}
             </ul>
           </div>
@@ -118,10 +118,10 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
         {/* ── Qualifications ── */}
         {job.qualifications?.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Qualifications</p>
+            <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Qualifications</p>
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {job.qualifications.slice(0, 7).map((q, i) => (
-                <li key={i} style={{ fontSize: 13, color: 'var(--text-main)', marginBottom: 4, lineHeight: 1.5 }}>{q}</li>
+                <li key={i} style={{ fontSize: 13, color: '#cbd5e1', marginBottom: 4, lineHeight: 1.5 }}>{q}</li>
               ))}
             </ul>
           </div>
@@ -130,10 +130,10 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
         {/* ── Benefits ── */}
         {job.benefits?.length > 0 && (
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Benefits</p>
+            <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Benefits</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {job.benefits.map((b, i) => (
-                <span key={i} style={{ background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: 4, padding: '3px 9px', fontSize: 11, color: 'var(--success)' }}>{b}</span>
+                <span key={i} style={{ background: '#22c55e1a', border: '1px solid #22c55e33', borderRadius: 4, padding: '3px 9px', fontSize: 11, color: '#22c55e' }}>{b}</span>
               ))}
             </div>
           </div>
@@ -144,7 +144,7 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
           <div style={{ marginTop: 18, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {job.apply_urls.slice(0, 3).map((url, i) => (
               <a key={i} href={url} target="_blank" rel="noreferrer"
-                style={{ background: 'var(--primary)', color: '#fff', borderRadius: 6, padding: '8px 18px', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
+                style={{ background: '#6366f1', color: '#fff', borderRadius: 6, padding: '8px 18px', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
                 Apply{job.apply_urls.length > 1 ? ` (${i + 1})` : ''} ↗
               </a>
             ))}
@@ -153,7 +153,7 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
 
         {/* ── Action ── */}
         {(onSelectJob || onAddToApply || onRemove) && (
-          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #2d2d4e', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             {onSelectJob && (
               <Btn size="sm" onClick={() => { onSelectJob(job); onClose() }}>
                 Chat / Cover Letter →
@@ -162,7 +162,7 @@ export function JobDetailModal({ job, loading, onClose, onSelectJob, jobStatus, 
             {(onAddToApply || onRemove) && (
               jobStatus?.in_tracker ? (
                 <>
-                  <Badge color="var(--success)">✓ In Applications Board</Badge>
+                  <Badge color="#22c55e">✓ In Applications Board</Badge>
                   {onRemove && jobStatus.application_id && (
                     <Btn size="sm" variant="ghost"
                       onClick={() => { onRemove(jobStatus.application_id, job.id); onClose() }}>
@@ -326,12 +326,12 @@ export default function Jobs({ onSelectJob }) {
   return (
     <div>
       <SectionTitle>Jobs</SectionTitle>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #2d2d4e' }}>
         {tabs.map(t => (
           <button key={t} onClick={() => { setTab(t); setErr(''); setSelected(null) }}
             style={{
               padding: '7px 14px', background: 'none', border: 'none', cursor: 'pointer',
-              color: tab === t ? 'var(--primary)' : 'var(--text-muted)', borderBottom: tab === t ? '2px solid var(--primary)' : '2px solid transparent',
+              color: tab === t ? '#a5b4fc' : '#64748b', borderBottom: tab === t ? '2px solid #6366f1' : '2px solid transparent',
               fontSize: 13, fontWeight: tab === t ? 700 : 400, textTransform: 'capitalize'
             }}>
             {t}
@@ -363,7 +363,7 @@ export default function Jobs({ onSelectJob }) {
 
       {tab === 'prefs' && prefs && (
         <Card>
-          <h4 style={{ marginBottom: 10, color: 'var(--text-main)' }}>Job Type Preferences</h4>
+          <h4 style={{ marginBottom: 10, color: '#e2e8f0' }}>Job Type Preferences</h4>
           {['Full-time', 'Part-time', 'Contract', 'Internship', 'Remote', 'Hybrid', 'On-site', 'Freelance'].map(t => (
             <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer', fontSize: 14 }}>
               <input type="checkbox" checked={prefTypes.includes(t)}
@@ -379,17 +379,17 @@ export default function Jobs({ onSelectJob }) {
         <div style={{ marginTop: 8 }}>
           {loading && <div style={{ textAlign: 'center', padding: 20 }}><Spinner /></div>}
           {!loading && savedList.length === 0 && (
-            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No jobs added yet. Browse suggestions and click "+ Add to Apply".</p>
+            <p style={{ color: '#475569', fontSize: 13 }}>No jobs added yet. Browse suggestions and click "+ Add to Apply".</p>
           )}
           {savedList.map(a => (
             <Card key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ flex: 1 }}>
-                <strong style={{ color: 'var(--text-main)' }}>{a.job_title}</strong>
-                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                <strong style={{ color: '#e2e8f0' }}>{a.job_title}</strong>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>
                   {a.company}{a.location ? ` · ${a.location}` : ''}
                 </div>
-                {a.salary && <div style={{ color: 'var(--success)', fontSize: 12 }}>{a.salary}</div>}
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                {a.salary && <div style={{ color: '#22c55e', fontSize: 12 }}>{a.salary}</div>}
+                <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>
                   Manage status from the Applications board
                 </div>
               </div>
@@ -407,26 +407,21 @@ export default function Jobs({ onSelectJob }) {
         <div style={{ marginTop: 8 }}>
           {loading && <div style={{ textAlign: 'center', padding: 20 }}><Spinner /></div>}
           {!loading && jobList.length === 0 && (tab === 'search' ? null : (
-            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No suggestions yet. Upload a CV first.</p>
+            <p style={{ color: '#475569', fontSize: 13 }}>No suggestions yet. Upload a CV first.</p>
           ))}
           {jobList.length > 0 && (
             <>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{jobList.length} jobs — click any to view details</p>
+              <p style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>{jobList.length} jobs — click any to view details</p>
               {jobList.map(j => (
-                <div key={j.id || j.external_id || j.title}
-                  className="job-item-hover"
-                  style={{
-                    cursor: 'pointer',
-                    background: selected?.id === j.id ? 'var(--bg-card-hover)' : 'var(--bg-card)',
-                    border: selected?.id === j.id ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
-                    borderRadius: 8, padding: 16, marginBottom: 8, transition: 'all 0.2s'
-                  }}
+                <Card key={j.id || j.external_id || j.title}
+                  style={{ cursor: 'pointer', border: selected?.id === j.id ? '1px solid #6366f1' : undefined }}
                   onClick={() => openDetail(j)}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ flex: 1 }}>
-                      <strong style={{ color: 'var(--text-main)' }}>{j.title}</strong>
-                      <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                      <strong style={{ color: '#e2e8f0' }}>{j.title}</strong>
+                      <div style={{ color: '#94a3b8', fontSize: 13 }}>
                         {j.company_name} · {j.location || 'Remote'}
+                        {j.experience_level && <span style={{ color: '#475569' }}> · {j.experience_level}</span>}
                       </div>
                       {j.salary && <div style={{ color: '#22c55e', fontSize: 12, marginTop: 2 }}>{j.salary}</div>}
                       {j.skills_and_technologies?.length > 0 && (
