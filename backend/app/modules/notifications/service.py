@@ -16,7 +16,7 @@ async def create_and_publish(
     title: str,
     message: str,
     data: Optional[dict] = None,
-) -> None:
+) -> str:
     from app.core.session import SessionLocal
     from app.modules.notifications import db_service as notif_db
 
@@ -45,3 +45,5 @@ async def create_and_publish(
         await r.aclose()
     except Exception as e:
         print(f"[notifications] Redis publish failed (notification still saved): {e}")
+
+    return notification.id

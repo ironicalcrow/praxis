@@ -1,5 +1,6 @@
 from datetime import datetime
-from typing import Optional, List
+from enum import Enum
+from typing import Optional, List, Any
 
 from pydantic import BaseModel
 
@@ -13,6 +14,8 @@ class ConversationCreate(BaseModel):
 class ConversationOut(BaseModel):
     id: str
     title: str
+    context_type: str = "general"
+    job_id: Optional[str] = None
     summary: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -37,9 +40,27 @@ class SessionOut(BaseModel):
         from_attributes = True
 
 
+class SessionSummaryOut(BaseModel):
+    """Collapsed history card shown in the UI for past sessions."""
+    id: str
+    conversation_id: str
+    session_summary: Optional[str] = None
+    message_count: int
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ── Message ────────────────────────────────────────────────────────────────────
 
 class ChatMessageIn(BaseModel):
+    content: str
+
+
+class SimpleMessageIn(BaseModel):
+    """Used by the simplified /chat/message and /chat/job/{job_id}/message endpoints."""
     content: str
 
 
@@ -52,6 +73,34 @@ class ChatMessageOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ChatToolStatus(str, Enum):
+    handled = "handled"
+    unsupported = "unsupported"
+    failed = "failed"
+    confirmation_required = "confirmation_required"
+
+
+class ChatUIPayload(BaseModel):
+    type: str
+    data: Any | None = None
+
+
+class ChatNotificationPayload(BaseModel):
+    created: bool = False
+    notification_id: str | None = None
+
+
+class SimpleMessageOut(BaseModel):
+    """Returned by the simplified send-message endpoints."""
+    content: str
+    session_id: str
+    conversation_id: str
+    created_at: datetime
+    tool_status: ChatToolStatus = ChatToolStatus.handled
+    ui_payload: ChatUIPayload | None = None
+    notification: ChatNotificationPayload | None = None
 
 
 # ── Structured AI Response ─────────────────────────────────────────────────────

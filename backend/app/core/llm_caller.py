@@ -2,9 +2,13 @@ import httpx
 
 from app.core.config import settings
 
+_FALLBACK_CODES = {429, 402, 503}
+
 
 class LLMCallerError(Exception):
-    pass
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def get_llm_api_key() -> str | None:
@@ -19,10 +23,8 @@ def get_llm_model(model: str | None = None) -> str:
 def get_embedding_api_key() -> str | None:
     if settings.EMBEDDING_API_KEY:
         return settings.EMBEDDING_API_KEY
-
     if get_embedding_base_url() == get_llm_base_url():
         return settings.LLM_API_KEY
-
     return None
 
 def get_embedding_base_url() -> str:
@@ -33,34 +35,24 @@ def get_embedding_model() -> str:
     return settings.EMBEDDING_MODEL
 
 
-async def call_llm(
-    *,
+async def _call_provider(
+    api_key: str | None,
+    base_url: str,
+    model: str,
     messages: list[dict[str, str]],
-    model: str | None = None,
-    temperature: float = 0.0,
-    json_mode: bool = False,
-    timeout_seconds: float = 120.0,
+    temperature: float,
+    json_mode: bool,
+    timeout_seconds: float,
 ) -> str:
-    api_key = get_llm_api_key()
-    base_url = get_llm_base_url()
-    selected_model = get_llm_model(model)
+    url = f"{base_url.rstrip('/')}/chat/completions"
 
-    url = f"{base_url}/chat/completions"
-
-    headers = {
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
         headers["HTTP-Referer"] = "http://localhost:8000"
         headers["X-Title"] = "Praxis Backend"
 
-    payload = {
-        "model": selected_model,
-        "messages": messages,
-        "temperature": temperature,
-    }
-
+    payload: dict = {"model": model, "messages": messages, "temperature": temperature}
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
 
@@ -75,32 +67,22 @@ async def call_llm(
         status = e.response.status_code
         if status in (404, 402, 401, 400):
             print(f"\n[LLM DIAGNOSTIC] API Error {status}:")
-            print(f" -> Check your .env file!")
-            print(f" -> Current Model: {selected_model}")
-            print(f" -> Base URL: {base_url}")
-            print(f" -> If you see 'model not found' (404), ensure the model name is correct (e.g., 'deepseek/deepseek-chat' for OpenRouter, or 'llama3.1' for local Ollama).")
-            print(f" -> If you see 'insufficient credits' (402), change your LLM_MODEL and LLM_BASE_URL to point to a free local endpoint like Ollama.\n")
-            
+            print(f" -> Model: {model} | URL: {base_url}")
+            print(f" -> Check LLM_API_KEY / LLM_BASE_URL / LLM_MODEL in .env\n")
         raise LLMCallerError(
-            f"LLM API error {e.response.status_code}: {e.response.text}"
+            f"LLM API error {status}: {e.response.text}",
+            status_code=status,
         )
 
     except httpx.RequestError as e:
-        print(f"\n[LLM DIAGNOSTIC] Connection Error:")
-        print(f" -> Could not reach the LLM provider at {base_url}.")
-        print(f" -> If using local Ollama, make sure the Ollama app is actually running!\n")
-        raise LLMCallerError(
-            f"Could not connect to LLM API: {type(e).__name__}: {repr(e)}"
-        )
+        print(f"\n[LLM DIAGNOSTIC] Connection Error — could not reach {base_url}\n")
+        raise LLMCallerError(f"Could not connect to LLM API: {type(e).__name__}: {repr(e)}")
 
     data = response.json()
-
     try:
         content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as e:
-        raise LLMCallerError(
-            f"Unexpected LLM response shape: {e}. Response: {data}"
-        )
+        raise LLMCallerError(f"Unexpected LLM response shape: {e}. Response: {data}")
 
     if not content:
         raise LLMCallerError("LLM returned empty content")
@@ -108,45 +90,91 @@ async def call_llm(
     return content
 
 
-async def embed_text(text: str, model: str | None = None) -> list[float]:
-    """
-    Generates a dense vector embedding using the configured embedding endpoint.
-    Defaults to the local Ollama model (e.g. nomic-embed-text).
-    """
-    api_key = get_embedding_api_key()
-    base_url = get_embedding_base_url()
-    selected_model = model or get_embedding_model()
+async def call_llm(
+    *,
+    messages: list[dict[str, str]],
+    model: str | None = None,
+    temperature: float = 0.0,
+    json_mode: bool = False,
+    timeout_seconds: float = 120.0,
+) -> str:
+    try:
+        return await _call_provider(
+            api_key=get_llm_api_key(),
+            base_url=get_llm_base_url(),
+            model=get_llm_model(model),
+            messages=messages,
+            temperature=temperature,
+            json_mode=json_mode,
+            timeout_seconds=timeout_seconds,
+        )
+    except LLMCallerError as primary_err:
+        if primary_err.status_code not in _FALLBACK_CODES or not settings.LLM_FALLBACK_API_KEY:
+            raise
+        print(f"[LLM] Primary provider returned {primary_err.status_code} — trying fallback provider...")
+        return await _call_provider(
+            api_key=settings.LLM_FALLBACK_API_KEY,
+            base_url=(settings.LLM_FALLBACK_BASE_URL or settings.LLM_BASE_URL).rstrip("/"),
+            model=settings.LLM_FALLBACK_MODEL or get_llm_model(model),
+            messages=messages,
+            temperature=temperature,
+            json_mode=json_mode,
+            timeout_seconds=timeout_seconds,
+        )
 
-    url = f"{base_url}/embeddings"
 
-    headers = {
-        "Content-Type": "application/json",
-    }
+async def _embed_provider(
+    api_key: str | None,
+    base_url: str,
+    model: str,
+    text: str,
+    timeout: httpx.Timeout,
+) -> list[float]:
+    url = f"{base_url.rstrip('/')}/embeddings"
+
+    headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    payload = {
-        "model": selected_model,
-        "input": text
-    }
-
-    timeout = httpx.Timeout(60.0, connect=10.0)
-
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(url, headers=headers, json=payload)
+            response = await client.post(url, headers=headers, json={"model": model, "input": text})
             response.raise_for_status()
-            
+
     except httpx.HTTPStatusError as e:
-        raise LLMCallerError(f"Embeddings API error {e.response.status_code}: {e.response.text}")
-        
+        raise LLMCallerError(
+            f"Embeddings API error {e.response.status_code}: {e.response.text}",
+            status_code=e.response.status_code,
+        )
+
     except httpx.RequestError as e:
         raise LLMCallerError(f"Could not connect to Embeddings API: {type(e).__name__}: {repr(e)}")
 
     data = response.json()
-
     try:
-        embedding = data["data"][0]["embedding"]
-        return embedding
+        return data["data"][0]["embedding"]
     except (KeyError, IndexError, TypeError) as e:
         raise LLMCallerError(f"Unexpected Embeddings response shape: {e}. Response: {data}")
+
+
+async def embed_text(text: str, model: str | None = None) -> list[float]:
+    timeout = httpx.Timeout(60.0, connect=10.0)
+    try:
+        return await _embed_provider(
+            api_key=get_embedding_api_key(),
+            base_url=get_embedding_base_url(),
+            model=model or get_embedding_model(),
+            text=text,
+            timeout=timeout,
+        )
+    except LLMCallerError as primary_err:
+        if primary_err.status_code not in _FALLBACK_CODES or not settings.EMBEDDING_FALLBACK_API_KEY:
+            raise
+        print(f"[Embeddings] Primary provider returned {primary_err.status_code} — trying fallback provider...")
+        return await _embed_provider(
+            api_key=settings.EMBEDDING_FALLBACK_API_KEY,
+            base_url=(settings.EMBEDDING_FALLBACK_BASE_URL or settings.EMBEDDING_BASE_URL).rstrip("/"),
+            model=settings.EMBEDDING_FALLBACK_MODEL or model or get_embedding_model(),
+            text=text,
+            timeout=timeout,
+        )

@@ -39,7 +39,6 @@ def _save_job_to_db(schema, vector, search_query_id):
                 company_name=schema.company_name,
                 location=schema.location,
                 description=schema.description,
-                llm_summary=schema.llm_summary,
                 salary=schema.salary,
                 experience_level=schema.experience_level,
                 posted_at=schema.posted_at,
@@ -53,6 +52,7 @@ def _save_job_to_db(schema, vector, search_query_id):
                 apply_urls=schema.apply_urls,
                 job_types=schema.job_types,
                 is_remote=schema.is_remote,
+                job_metadata=schema.metadata,
                 embedding=vector,
             )
             db.add(new_job)
@@ -82,8 +82,8 @@ async def _process_and_save_job(raw_job, r, sem) -> None:
             embedding_input = f"{job_schema.title} {job_schema.company_name} "
             if job_schema.skills_and_technologies:
                 embedding_input += "Skills: " + ", ".join(job_schema.skills_and_technologies) + ". "
-            if job_schema.llm_summary:
-                embedding_input += job_schema.llm_summary
+            if job_schema.description:
+                embedding_input += job_schema.description[:400]
 
             try:
                 embedding_vector = await embed_text(embedding_input)
@@ -227,6 +227,18 @@ async def collect_jobs_for_query(
         await r.aclose()
     except Exception:
         pass
+
+    # Mark query as freshly run so the staleness check won't re-enqueue within 24h
+    if search_query_id:
+        def mark_run():
+            with SessionLocal() as db:
+                from app.modules.jobs.models import SearchQuery
+                sq = db.query(SearchQuery).filter(SearchQuery.id == search_query_id).first()
+                if sq:
+                    sq.last_run_at = datetime.utcnow()
+                    db.commit()
+        await asyncio.to_thread(mark_run)
+
     print(f"[Worker] Instant Queue: Finished for '{query}'!")
 
 
@@ -250,8 +262,8 @@ async def clean_expired_jobs(ctx):
             else:
                 deleted_sq = db.query(SearchQuery).delete(synchronize_session=False)
 
-            two_days_ago = datetime.utcnow() - timedelta(hours=48)
-            deleted_jobs = db.query(Job).filter(Job.updated_at < two_days_ago).delete(
+            seven_days_ago = datetime.utcnow() - timedelta(days=7)
+            deleted_jobs = db.query(Job).filter(Job.updated_at < seven_days_ago).delete(
                 synchronize_session=False
             )
             db.commit()

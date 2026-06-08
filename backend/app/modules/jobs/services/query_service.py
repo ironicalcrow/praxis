@@ -14,7 +14,7 @@ from app.modules.jobs.models import JobQuery, SearchQuery
 def fetch_job_queries_by_resume(resume_id: str) -> list[str]:
     db = get_session()
     try:
-        rid = uuid.UUID(resume_id) if isinstance(resume_id, str) else resume_id
+        rid = str(resume_id)
         queries = db.query(JobQuery).filter(JobQuery.resume_id == rid).order_by(JobQuery.priority).all()
         return [q.query for q in queries if q.query]
     finally:
@@ -40,7 +40,8 @@ def _get_or_create_search_query(db, query: str, location: str) -> str:
 async def get_or_generate_resume_job_queries(
     resume_id: str,
     resume: ResumeSchema,
-    limit: int = 5,
+    limit: int = 10,
+    user_preferences: dict | None = None,
 ) -> list[str]:
     existing_queries = fetch_job_queries_by_resume(resume_id)
     if existing_queries:
@@ -51,35 +52,34 @@ async def get_or_generate_resume_job_queries(
         # Get location from resume
         loc = resume.location or resume.country or "Any"
 
-        generated = await generate_resume_job_queries(resume=resume, limit=limit)
+        generated = await generate_resume_job_queries(
+            resume=resume, user_preferences=user_preferences, limit=limit
+        )
 
         saved_queries = []
+        query_sq_pairs = []
         for item in generated:
-            search_query_id = _get_or_create_search_query(db, query=item["query"], location=loc)
+            sq_id = _get_or_create_search_query(db, query=item["query"], location=loc)
             q = JobQuery(
                 id=uuid.uuid4(),
-                resume_id=uuid.UUID(resume_id) if isinstance(resume_id, str) else resume_id,
-                search_query_id=search_query_id,
+                resume_id=str(resume_id),
+                search_query_id=sq_id,
                 query=item["query"],
                 reason=item.get("reason"),
                 priority=item.get("priority"),
-                remote_jobs_only=item.get("remote_jobs_only"),
             )
             db.add(q)
             saved_queries.append(item["query"])
+            query_sq_pairs.append((item["query"], sq_id))
         db.commit()
 
-        # Instantly enqueue to ARQ
+        # Instantly enqueue to ARQ with search_query_id so jobs get linked
         try:
             from app.core.worker import redis_settings
             from arq import create_pool
             redis = await create_pool(redis_settings)
-            for item in generated:
-                await redis.enqueue_job(
-                    'collect_jobs_for_query',
-                    item["query"],
-                    loc,
-                )
+            for q_text, sq_id in query_sq_pairs:
+                await redis.enqueue_job('collect_jobs_for_query', q_text, loc, sq_id)
             await redis.close()
         except Exception as e:
             print(f"[QueryService] Failed to enqueue background tasks: {e}")
@@ -95,7 +95,7 @@ async def get_or_generate_resume_job_queries(
 def delete_job_queries(resume_id: str) -> None:
     db = get_session()
     try:
-        rid = uuid.UUID(resume_id) if isinstance(resume_id, str) else resume_id
+        rid = str(resume_id)
         db.query(JobQuery).filter(JobQuery.resume_id == rid).delete()
         db.commit()
     except Exception:
@@ -109,10 +109,11 @@ async def refresh_resume_job_queries(
     resume_id: str,
     resume: ResumeSchema,
     limit: int = 10,
+    user_preferences: dict | None = None,
 ) -> list[str]:
     db = get_session()
     try:
-        rid = uuid.UUID(resume_id) if isinstance(resume_id, str) else resume_id
+        rid = str(resume_id)
         # Preserve manual searches before wiping
         searched = db.query(JobQuery).filter(
             JobQuery.resume_id == rid,
@@ -132,35 +133,37 @@ async def refresh_resume_job_queries(
         generated = await generate_resume_job_queries(
             resume=resume,
             user_searched_queries=user_searched_texts,
+            user_preferences=user_preferences,
             limit=limit,
         )
 
-        rid = uuid.UUID(resume_id) if isinstance(resume_id, str) else resume_id
+        rid = str(resume_id)
         saved_queries = []
+        query_sq_pairs = []
         for item in generated:
-            search_query_id = _get_or_create_search_query(db, query=item["query"], location=loc)
+            sq_id = _get_or_create_search_query(db, query=item["query"], location=loc)
             q = JobQuery(
                 id=uuid.uuid4(),
                 resume_id=rid,
-                search_query_id=search_query_id,
+                search_query_id=sq_id,
                 query=item["query"],
                 reason=item.get("reason", "resume based"),
                 priority=item.get("priority", 5),
-                remote_jobs_only=item.get("remote_jobs_only"),
             )
             db.add(q)
             saved_queries.append(item["query"])
+            query_sq_pairs.append((item["query"], sq_id))
         db.commit()
 
-        # Instantly enqueue to ARQ
+        # Instantly enqueue to ARQ with search_query_id so jobs get linked
         try:
             from app.core.worker import redis_settings
             from arq import create_pool
             redis = await create_pool(redis_settings)
             print(f"[QueryService] Enqueuing {len(saved_queries)} queries for location: {loc}")
-            for item in generated:
-                print(f" -> collect_jobs_for_query: '{item['query']}' in '{loc}'")
-                await redis.enqueue_job('collect_jobs_for_query', item["query"], loc)
+            for q_text, sq_id in query_sq_pairs:
+                print(f" -> collect_jobs_for_query: '{q_text}' in '{loc}'")
+                await redis.enqueue_job('collect_jobs_for_query', q_text, loc, sq_id)
             await redis.close()
         except Exception as e:
             print(f"[QueryService] Failed to enqueue refreshed tasks: {e}")
@@ -220,12 +223,10 @@ def normalize_generated_queries(
             query = _clean_query(item)
             reason = None
             priority = index + 1
-            remote_jobs_only = None
         elif isinstance(item, dict):
             query = _clean_query(item.get("query"))
             reason = item.get("reason")
             priority = item.get("priority") or index + 1
-            remote_jobs_only = item.get("remote_jobs_only")
         else:
             continue
 
@@ -237,7 +238,6 @@ def normalize_generated_queries(
             "query": query,
             "reason": str(reason).strip() if reason else None,
             "priority": int(priority),
-            "remote_jobs_only": bool(remote_jobs_only) if remote_jobs_only is not None else None,
         })
 
         if len(result) >= limit:
@@ -288,11 +288,6 @@ Rules:
 - If the user has Recent Manual Searches, ensure your queries strongly encompass what they are actively looking for.
 - Pay close attention to User Preferences (job_types) when set.
 
-Optional JSearch parameter — include ONLY when clearly applicable:
-- `remote_jobs_only`: Boolean (true/false).
-  - Set true if user explicitly prefers "Remote" in preferences or the query contains the word "remote".
-  - Omit entirely in all other cases.
-
 Return ONLY valid JSON.
 
 Required shape:
@@ -300,7 +295,6 @@ Required shape:
   "queries": [
     {{
       "query": "backend developer",
-      "remote_jobs_only": true,
       "priority": 1,
       "reason": "resume based"
     }}

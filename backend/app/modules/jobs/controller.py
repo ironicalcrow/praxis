@@ -1,8 +1,13 @@
 from typing import Optional, Any
 import asyncio
+import json
 from datetime import datetime
 import uuid
 
+import numpy as np
+import redis.asyncio as aioredis
+
+from app.core.config import settings
 from app.modules.CV.db_service import fetch_resume_from_db
 from app.modules.jobs.services.fit_scorer import compute_fit_score
 from app.schemas import JobSchema, ResumeSchema, FitScoreResponse, JobRequirementProfile
@@ -13,11 +18,14 @@ from app.modules.jobs.models import Job, JobQuery, UserPreference
 from app.core.session import SessionLocal
 from app.core.llm_caller import embed_text
 
+FIT_SCORE_CACHE_TTL = 21600  # 6 hours
+
+
 
 def _job_to_profile(job) -> JobRequirementProfile:
     skills = list(job.skills_and_technologies or []) if hasattr(job, 'skills_and_technologies') else []
     return JobRequirementProfile(
-        summary=getattr(job, 'llm_summary', None) or "",
+        summary=getattr(job, 'description', None) or "",
         description=getattr(job, 'description', None) or "",
         required_skills=skills,
         preferred_skills=[],
@@ -35,16 +43,75 @@ def fast_map_db_to_schema(db_job: Job) -> JobSchema:
         provider_id=db_job.provider_id,
         title=db_job.title,
         company_name=db_job.company_name,
+        company_website=db_job.company_website,
+        publisher=db_job.publisher,
         location=db_job.location,
+        is_remote=db_job.is_remote,
         posted_at=db_job.posted_at,
+        deadline=db_job.deadline,
+        salary=db_job.salary,
+        experience_level=db_job.experience_level,
         apply_urls=db_job.apply_urls or [],
         description=db_job.description,
-        llm_summary=db_job.llm_summary,
         skills_and_technologies=db_job.skills_and_technologies or [],
         responsibilities=db_job.responsibilities or [],
+        qualifications=db_job.qualifications or [],
+        benefits=db_job.benefits or [],
         job_types=db_job.job_types or [],
         metadata=db_job.job_metadata or {},
     )
+
+
+async def _compute_fit_score_with_cache(
+    user_id: str,
+    job_id: str,
+    job_embedding,
+    profile: JobRequirementProfile,
+    candidate: ResumeSchema,
+    add_reasoning: bool = True,
+) -> FitScoreResponse:
+    cache_key = f"fit_score:{user_id}:{job_id}"
+
+    r_fit = aioredis.from_url(settings.REDIS_URL)
+    try:
+        cached_raw = await r_fit.get(cache_key)
+        if cached_raw:
+            print(f"[FitScore] Cache HIT user={user_id} job={job_id}")
+            return FitScoreResponse(**json.loads(cached_raw))
+    except Exception:
+        pass
+    finally:
+        await r_fit.aclose()
+
+    semantic_sim = None
+    if job_embedding:
+        def _fetch_resume_vec():
+            from app.modules.CV.models import Resume
+            with SessionLocal() as db:
+                resume = db.query(Resume).filter(Resume.user_id == user_id).first()
+                return list(resume.embedding) if resume and resume.embedding is not None else None
+        resume_vec = await asyncio.to_thread(_fetch_resume_vec)
+        if resume_vec:
+            jv = np.array(job_embedding)
+            rv = np.array(resume_vec)
+            denom = np.linalg.norm(rv) * np.linalg.norm(jv)
+            if denom > 1e-9:
+                semantic_sim = max(0.0, min(1.0, float(np.dot(rv, jv) / denom)))
+
+    result = await compute_fit_score(
+        profile=profile, candidate=candidate,
+        semantic_similarity=semantic_sim, add_reasoning=add_reasoning,
+    )
+
+    r_fit2 = aioredis.from_url(settings.REDIS_URL)
+    try:
+        await r_fit2.setex(cache_key, FIT_SCORE_CACHE_TTL, result.model_dump_json())
+    except Exception:
+        pass
+    finally:
+        await r_fit2.aclose()
+
+    return result
 
 
 async def search_live_jobs(
@@ -55,7 +122,6 @@ async def search_live_jobs(
     page: int = 1,
     num_pages: int = 1,
     country: str = "bd",
-    remote_jobs_only: Optional[bool] = None,
 ) -> list[JobSchema]:
     # 1. Fetch UserPreference for location context
     def fetch_prefs():
@@ -94,18 +160,17 @@ async def search_live_jobs(
             existing = next((q for q in user_queries if q.search_query_id == sq_id), None)
             if not existing:
                 if len(user_queries) >= 10:
-                    evicted = user_queries[0]
+                    evicted = user_queries[-1]
                     print(f"[ManualSearch] Evicting lowest-priority query '{evicted.query}'.")
                     db.delete(evicted)
 
                 db.add(JobQuery(
                     id=uuid.uuid4(),
-                    resume_id=uuid.UUID(resume_id),
+                    resume_id=str(resume_id),
                     search_query_id=sq_id,
                     query=query,
                     reason="user searched",
                     priority=10,
-                    remote_jobs_only=remote_jobs_only,
                 ))
             else:
                 existing.priority = 10
@@ -196,31 +261,18 @@ async def search_live_jobs(
         import redis.asyncio as aioredis
         from app.core.config import settings
         r = aioredis.from_url(settings.REDIS_URL)
-        db_job_ids = {j.id for j in db_jobs}
+        db_external_ids = {j.external_id for j in db_jobs if j.external_id}
         try:
             from app.modules.jobs.services.jsearch_parser import parse_jsearch_to_schema
             for r_job in live_raw:
-                if r_job.job_id in db_job_ids:
+                if r_job.job_id in db_external_ids:
                     continue
                 try:
-                    await r.setex(f"temp_job:{r_job.job_id}", 7200, r_job.model_dump_json())
+                    live_id = str(uuid.uuid4())
+                    await r.setex(f"temp_job:{live_id}", 7200, r_job.model_dump_json())
                     parsed = parse_jsearch_to_schema(r_job)
-                    final_schemas.append(JobSchema(
-                        id=parsed.external_id,
-                        external_id=parsed.external_id,
-                        provider_id=parsed.provider_id,
-                        title=parsed.title,
-                        company_name=parsed.company_name,
-                        location=parsed.location,
-                        apply_urls=parsed.apply_urls or [],
-                        description=parsed.description,
-                        posted_at=parsed.posted_at,
-                        skills_and_technologies=parsed.skills_and_technologies or [],
-                        responsibilities=parsed.responsibilities or [],
-                        job_types=parsed.job_types or [],
-                        qualifications=parsed.qualifications or [],
-                        benefits=parsed.benefits or [],
-                    ))
+                    parsed.id = live_id
+                    final_schemas.append(parsed)
                 except Exception:
                     pass
         finally:
@@ -258,7 +310,6 @@ async def get_job_detail(job_id: str, current_user: Any = None) -> JobSchema | N
             experience_level=db_job.experience_level,
             apply_urls=db_job.apply_urls or [],
             description=db_job.description,
-            llm_summary=db_job.llm_summary,
             skills_and_technologies=db_job.skills_and_technologies or [],
             responsibilities=db_job.responsibilities or [],
             qualifications=db_job.qualifications or [],
@@ -272,10 +323,15 @@ async def get_job_detail(job_id: str, current_user: Any = None) -> JobSchema | N
                 resume_data = await asyncio.to_thread(fetch_resume_from_db, current_user.id)
                 candidate_resume = ResumeSchema(**resume_data)
                 profile = _job_to_profile(db_job)
-                # No cosine distance available in detail view — skill-only scoring
-                schema.fit_score = await compute_fit_score(profile=profile, candidate=candidate_resume)
+                schema.fit_score = await _compute_fit_score_with_cache(
+                    user_id=str(current_user.id),
+                    job_id=str(schema.id),
+                    job_embedding=db_job.embedding,
+                    profile=profile,
+                    candidate=candidate_resume,
+                )
             except Exception as e:
-                print(f"[JobDetail] Fit score failed: {e}")
+                print(f"[JobDetail] Fit score (DB path) failed: {e}")
 
         return schema
 
@@ -301,42 +357,51 @@ async def get_job_detail(job_id: str, current_user: Any = None) -> JobSchema | N
     raw_job = RawScrapedJob(**json.loads(raw_data_str))
     parsed_schema = parse_jsearch_to_schema(raw_job)
 
-    if current_user:
-        try:
-            resume_data = await asyncio.to_thread(fetch_resume_from_db, current_user.id)
-            candidate_resume = ResumeSchema(**resume_data)
-            profile = _job_to_profile(parsed_schema)
-            parsed_schema.fit_score = await compute_fit_score(profile=profile, candidate=candidate_resume)
-        except Exception as e:
-            print(f"[JobDetail] Fit score for live job failed: {e}")
-
-    # Embed and persist the parsed job
+    # Embed FIRST (blocking) so the saved row is immediately searchable via pgvector
+    embedding_input = f"{parsed_schema.title} {parsed_schema.company_name} "
+    if parsed_schema.skills_and_technologies:
+        embedding_input += "Skills: " + ", ".join(parsed_schema.skills_and_technologies) + ". "
+    if parsed_schema.description:
+        embedding_input += parsed_schema.description[:400]
     try:
-        embedding_input = f"{parsed_schema.title} {parsed_schema.company_name} "
-        if parsed_schema.skills_and_technologies:
-            embedding_input += "Skills: " + ", ".join(parsed_schema.skills_and_technologies) + ". "
-        if parsed_schema.llm_summary:
-            embedding_input += parsed_schema.llm_summary
         embedding_vector = await embed_text(embedding_input)
+        print(f"[JobDetail] ✅ Embedding computed ({len(embedding_vector)} dims).")
     except Exception as e:
         print(f"[JobDetail] Embedding failed: {e}. Saving without vector.")
         embedding_vector = None
 
     def save_live_job():
         with SessionLocal() as db:
+            # Dedup: job may already exist if ARQ worker scraped it concurrently
+            existing = db.query(Job).filter(Job.external_id == parsed_schema.external_id).first()
+            if existing:
+                if embedding_vector is not None and existing.embedding is None:
+                    existing.embedding = embedding_vector
+                    db.commit()
+                return existing.id
+
             new_job = Job(
+                id=job_id,
                 external_id=parsed_schema.external_id,
                 provider_id=parsed_schema.provider_id,
                 title=parsed_schema.title,
                 company_name=parsed_schema.company_name,
+                company_website=parsed_schema.company_website,
+                publisher=parsed_schema.publisher,
                 location=parsed_schema.location,
+                is_remote=parsed_schema.is_remote,
+                posted_at=parsed_schema.posted_at,
+                deadline=parsed_schema.deadline,
+                salary=parsed_schema.salary,
+                experience_level=parsed_schema.experience_level,
                 description=parsed_schema.description,
-                llm_summary=parsed_schema.llm_summary,
                 skills_and_technologies=parsed_schema.skills_and_technologies,
                 responsibilities=parsed_schema.responsibilities,
+                qualifications=parsed_schema.qualifications,
+                benefits=parsed_schema.benefits,
                 apply_urls=parsed_schema.apply_urls,
                 job_types=parsed_schema.job_types,
-                is_remote=parsed_schema.is_remote,
+                job_metadata=parsed_schema.metadata,
                 embedding=embedding_vector,
             )
             db.add(new_job)
@@ -347,9 +412,33 @@ async def get_job_detail(job_id: str, current_user: Any = None) -> JobSchema | N
     try:
         saved_id = await asyncio.to_thread(save_live_job)
         parsed_schema.id = saved_id
-        print(f"[JobDetail] Live job {job_id} persisted to DB.")
+        print(f"[JobDetail] Live job {job_id} persisted to DB (with embedding).")
     except Exception as e:
         print(f"[JobDetail] Failed to persist live job: {e}")
+
+    if current_user:
+        try:
+            resume_data = await asyncio.to_thread(fetch_resume_from_db, current_user.id)
+            candidate_resume = ResumeSchema(**resume_data)
+            profile = JobRequirementProfile(
+                summary=parsed_schema.description or "",
+                description=parsed_schema.description or "",
+                required_skills=parsed_schema.skills_and_technologies or [],
+                preferred_skills=[],
+                tools_and_technologies=parsed_schema.skills_and_technologies or [],
+                soft_skills=[],
+                responsibilities=parsed_schema.responsibilities or [],
+                qualifications=parsed_schema.qualifications or [],
+            )
+            parsed_schema.fit_score = await _compute_fit_score_with_cache(
+                user_id=str(current_user.id),
+                job_id=str(parsed_schema.id),
+                job_embedding=embedding_vector,
+                profile=profile,
+                candidate=candidate_resume,
+            )
+        except Exception as e:
+            print(f"[JobDetail] Fit score failed: {e}")
 
     return parsed_schema
 
@@ -360,7 +449,7 @@ async def calculate_job_fit_score(job_id: str, current_user) -> FitScoreResponse
     candidate_resume = ResumeSchema(**resume_data)
 
     profile = JobRequirementProfile(
-        summary=job_schema.llm_summary or "",
+        summary=job_schema.description or "",
         description=job_schema.description or "",
         required_skills=job_schema.skills_and_technologies or [],
         preferred_skills=[],
@@ -376,10 +465,25 @@ async def calculate_job_fit_score(job_id: str, current_user) -> FitScoreResponse
         industry="",
         work_arrangement="Remote" if job_schema.is_remote else "Onsite",
         education_requirements=[],
-        important_context="",
+        important_context=[],
     )
 
-    return await compute_fit_score(profile=profile, candidate=candidate_resume, add_reasoning=True)
+    def fetch_job_embedding():
+        with SessionLocal() as db:
+            j = db.query(Job).filter(
+                (Job.id == str(job_schema.id)) | (Job.external_id == job_id)
+            ).first()
+            return list(j.embedding) if j and j.embedding is not None else None
+
+    job_embedding = await asyncio.to_thread(fetch_job_embedding)
+
+    return await _compute_fit_score_with_cache(
+        user_id=str(current_user.id),
+        job_id=str(job_schema.id or job_id),
+        job_embedding=job_embedding,
+        profile=profile,
+        candidate=candidate_resume,
+    )
 
 
 async def get_user_preferences(user_id: str) -> dict:

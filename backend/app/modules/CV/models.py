@@ -54,6 +54,7 @@ class ResumeSkill(Base):
     id = Column(String, primary_key=True)
     resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
     skill = Column(String(255), nullable=False)
+    embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
 
     resume = relationship("Resume", back_populates="skills")
 
@@ -68,6 +69,7 @@ class ResumeEducation(Base):
     institution = Column(String(255))
     year = Column(String(20))
     gpa = Column(String(10))
+    embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
 
     resume = relationship("Resume", back_populates="education")
 
@@ -81,6 +83,7 @@ class ResumeExperience(Base):
     role = Column(String(255))
     organization = Column(String(255))
     description = Column(Text)
+    embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
 
     resume = relationship("Resume", back_populates="experience")
 
@@ -94,6 +97,7 @@ class ResumeProject(Base):
     name = Column(String(255))
     description = Column(Text)
     technology = Column(String(255))
+    embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
 
     resume = relationship("Resume", back_populates="projects")
 
@@ -105,5 +109,6 @@ class ResumeCertification(Base):
     resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
 
     certification = Column(String(255), nullable=False)
+    embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
 
     resume = relationship("Resume", back_populates="certifications")

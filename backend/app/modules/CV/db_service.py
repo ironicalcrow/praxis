@@ -1,5 +1,4 @@
 import uuid
-from uuid import UUID as PyUUID, uuid4
 from datetime import datetime
 from typing import Optional
 
@@ -18,22 +17,12 @@ from app.modules.CV.models import (
 from app.schemas import ResumeSchema
 
 
-def parse_user_uuid(user_id: str):
-    try:
-        return PyUUID(str(user_id))
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid user_id. Expected UUID format.",
-        )
-
-
 def save_resume_to_db(parsed_resume: ResumeSchema, user_id: str, file_url: Optional[str] = None):
 
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         existing_resume = (
             db.query(Resume)
@@ -157,7 +146,7 @@ def fetch_resume_from_db(user_id: str):
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         resume = (
             db.query(Resume)
@@ -276,7 +265,7 @@ def save_cv_upload_record(user_id: str, file_url: str, storage_path: str, origin
     with SessionLocal() as db:
         db.query(CVUpload).filter(CVUpload.user_id == user_id).update({"is_active": False})
         record = CVUpload(
-            id=str(uuid4()),
+            id=str(uuid.uuid4()),
             user_id=user_id,
             file_url=file_url,
             storage_path=storage_path,

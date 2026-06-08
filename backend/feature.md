@@ -125,7 +125,7 @@ This lets the user switch to any previously uploaded CV. The system re-runs the 
 | Entity | Text sent to Jina |
 |---|---|
 | Resume | `"Location: X. Skills: A, B, C. [raw_text[:500]] Role at Org: desc."` |
-| Job | `"Title Company Skills: A, B. [llm_summary]"` |
+| Job | `"Title Company Skills: A, B. [description[:400]]"` |
 | User preferences | `"Preferred job types: Remote, Full-time"` |
 
 **Vector stored in:** `resumes.embedding` (Vector 768), `jobs.embedding` (Vector 768), `user_preferences.preference_embedding` (Vector 768)
@@ -222,8 +222,8 @@ Input: query (str), location (str|None), search_query_id (str|None)
 1. Find SearchQuery IDs that are still referenced by at least one JobQuery
    (i.e., at least one user still has this query)
 2. Delete SearchQuery rows NOT in that list (orphaned — no users care about them)
-3. Delete Job rows where updated_at < 48h ago
-   (jobs not refreshed by the CRON within 48h are considered expired)
+3. Delete Job rows where updated_at < 7 days ago
+   (jobs not refreshed by the CRON within 7 days are considered expired)
 ```
 
 ---
@@ -366,8 +366,9 @@ Verdict:
 Returns: { fit_score, verdict, reason, strengths[], weaknesses[] }
 ```
 
-**Where semantic_similarity IS used:** Suggestion pool (pgvector distance available)
-**Where it is NOT used:** Job detail view, live search results (no distance computed in those paths)
+**Where semantic_similarity IS used:** Suggestion pool (pgvector distance available — blended 50/50)
+**Where skill-only fit_score is used:** Live search results (no vector distance, pure skill overlap)
+**Where fit_score is NOT computed:** Job detail view (user already has score from search/suggestion context)
 
 ---
 
@@ -399,7 +400,7 @@ Returns: { fit_score, verdict, reason, strengths[], weaknesses[] }
 **Trigger:** `POST /jobs/live-search`
 
 ```
-Input: { query, location, page, num_pages, country, remote_jobs_only }
+Input: { query, location, page, num_pages, country }
 
 1. Fetch user preferences (for context, no location used from there)
 2. _get_or_create_search_query(db, query, target_loc)
@@ -418,9 +419,10 @@ Input: { query, location, page, num_pages, country, remote_jobs_only }
 7. Embed the query string → pgvector similarity search in jobs table
    (concurrent with step 8 via asyncio.gather)
 8. If page==1 and is_stale → also hit JSearch live for instant results (limit=10)
+   Live results cached in Redis as temp_job:{job_id} for 2 hours
 9. Merge DB results + live results (dedup by job_id)
-   Live jobs: cached in Redis as temp_job:{job_id} for 2 hours
-10. Return merged list (no fit_score — live search is raw results by design)
+10. Fetch resume → compute skill-only fit_score for every result (pure Python, no API cost)
+11. Return merged list with fit_scores
 ```
 
 ---
@@ -432,12 +434,10 @@ Input: { query, location, page, num_pages, country, remote_jobs_only }
 ```
 1. Look up job by external_id or id in the jobs table
 2. If found in DB:
-   - Map to JobSchema
-   - Compute fit_score (skill-only, no semantic_similarity — no distance available here)
-   - Return
+   - Map to JobSchema and return (no fit_score — user already saw it with score in search/suggestions)
 3. If not in DB:
    - Check Redis: temp_job:{job_id} (live search cache, 2h TTL)
-   - If found → parse the cached raw job → compute fit_score → embed it → save to DB
+   - If found → parse the cached raw job → embed it → save to DB → return
    - If not found → raise 404
 ```
 
@@ -508,7 +508,7 @@ ARQ CRON (every 6h)
   → Find stale SearchQueries → JSearch → embed → upsert jobs
 
 ARQ CRON (daily 01:00)
-  → Delete orphaned SearchQueries → delete jobs older than 48h
+  → Delete orphaned SearchQueries → delete jobs older than 7 days
 ```
 
 ---

@@ -26,6 +26,21 @@ from app.core.llm_caller import embed_text
 router = APIRouter()
 
 
+async def _invalidate_fit_scores(user_id: str):
+    import redis.asyncio as aioredis
+    from app.core.config import settings
+    r = aioredis.from_url(settings.REDIS_URL)
+    try:
+        keys = [key async for key in r.scan_iter(f"fit_score:{user_id}:*")]
+        if keys:
+            await r.delete(*keys)
+            print(f"[CV] ✅ Invalidated {len(keys)} fit score cache entries for user {user_id}.")
+    except Exception as e:
+        print(f"[CV] ⚠️ Fit score cache invalidation failed: {e}")
+    finally:
+        await r.aclose()
+
+
 def _write_temp(file_bytes: bytes, suffix: str) -> str:
     """Write bytes to a NamedTemporaryFile. Returns the temp file path."""
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
@@ -63,6 +78,12 @@ async def _run_background_steps(resume_id: str, resume_obj: ResumeSchema, user_i
         print(f"[CV] ⚠️ Embedding failed: {e}.")
 
     try:
+        from app.modules.CV.rag_service import embed_resume_sections
+        await embed_resume_sections(resume_id)
+    except Exception as e:
+        print(f"[CV] ⚠️ Section embedding failed: {e}.")
+
+    try:
         from app.modules.jobs.services.query_service import refresh_resume_job_queries
         await refresh_resume_job_queries(resume_id, resume_obj)
         print("[CV] ✅ Job queries generated.")
@@ -74,6 +95,11 @@ async def _run_background_steps(resume_id: str, resume_obj: ResumeSchema, user_i
         await async_invalidate_pool(user_id)
     except Exception as e:
         print(f"[CV] ⚠️ Pool invalidation failed: {e}.")
+
+    try:
+        await _invalidate_fit_scores(user_id)
+    except Exception as e:
+        print(f"[CV] ⚠️ Fit score invalidation failed: {e}.")
 
 
 @router.post("/upload-cv", response_model=UploadCVResponse)

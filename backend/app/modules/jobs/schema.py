@@ -35,7 +35,6 @@ class JobSearchRequest(BaseModel):
     page: int = 1
     num_pages: int = 1
     country: str = "bd"
-    remote_jobs_only: Optional[bool] = None
 
 class SuggestionWindowResponse(BaseModel):
     jobs: list['JobSchema']
@@ -62,8 +61,8 @@ class FitScoreResponse(BaseModel):
 class JobSchema(BaseModel):
     id: Optional[str] = None
     
-    external_id: str
-    provider_id: str
+    external_id: Optional[str] = None
+    provider_id: Optional[str] = None
     
     fit_score: Optional[FitScoreResponse] = None
     
@@ -86,7 +85,6 @@ class JobSchema(BaseModel):
     apply_urls: list[str] = Field(default_factory=list)
     
     description: Optional[str] = None
-    llm_summary: Optional[str] = None
     skills_and_technologies: list[str] = Field(default_factory=list)
     responsibilities: list[str] = Field(default_factory=list)
     qualifications: list[str] = Field(default_factory=list)

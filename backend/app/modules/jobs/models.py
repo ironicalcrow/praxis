@@ -27,7 +27,7 @@ class UserPreference(Base):
     user_id = Column(String, ForeignKey("users.id"), unique=True, nullable=False)
 
     job_types = Column(JSON, nullable=True)
-    preference_embedding = Column(Vector(768), nullable=True)
+    preference_embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -47,7 +47,6 @@ class SearchQuery(Base):
     id = Column(String, primary_key=True)
     query = Column(String(255), nullable=False)
     location = Column(String(255), nullable=True)
-    remote_jobs_only = Column(Boolean, nullable=True)
 
     last_run_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -63,7 +62,6 @@ class JobQuery(Base):
     resume_id = Column(String, ForeignKey("resumes.id"), nullable=False)
 
     query = Column(String(255), nullable=False)
-    remote_jobs_only = Column(Boolean, nullable=True)
     reason = Column(String(500))
     priority = Column(Integer)
     added_at = Column(DateTime, default=datetime.utcnow)
@@ -96,7 +94,6 @@ class Job(Base):
     apply_urls = Column(JSON, nullable=True)
 
     description = Column(Text, nullable=True)
-    llm_summary = Column(Text, nullable=True)
 
     skills_and_technologies = Column(JSON, nullable=True)
     responsibilities = Column(JSON, nullable=True)
@@ -112,27 +109,3 @@ class Job(Base):
 
     applications = relationship("Application", back_populates="job")
     search_queries = relationship("SearchQuery", secondary=search_query_jobs, back_populates="jobs")
-    fit_scores = relationship(
-        "JobFitScore",
-        back_populates="job",
-        cascade="all, delete-orphan",
-    )
-
-
-class JobFitScore(Base):
-    __tablename__ = "job_fit_scores"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    job_id = Column(String, ForeignKey("jobs.id"), nullable=False)
-
-    fit_score = Column(Float, nullable=False)
-    summary = Column(Text, nullable=True)
-
-    matched_skills = Column(JSON, nullable=True)
-    missing_skills = Column(JSON, nullable=True)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    job = relationship("Job", back_populates="fit_scores")

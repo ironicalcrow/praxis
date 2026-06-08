@@ -10,6 +10,7 @@ Regen threshold (100%): cycle pool from start + trigger background LLM query reg
 import asyncio
 import json
 import time
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -40,7 +41,7 @@ def _offset_key(user_id: str) -> str:
 def _job_to_profile(job) -> JobRequirementProfile:
     skills = list(job.skills_and_technologies or []) if hasattr(job, 'skills_and_technologies') else []
     return JobRequirementProfile(
-        summary=getattr(job, 'llm_summary', None) or "",
+        summary=getattr(job, 'description', None) or "",
         description=getattr(job, 'description', None) or "",
         required_skills=skills,
         preferred_skills=[],
@@ -173,48 +174,57 @@ async def build_suggestion_pool(
 
     # --- 3. Empty DB fallback — live JSearch seed ---
     if not rows and queries:
-        print("[JobSuggestion] DB empty — seeding pool from live JSearch for top query...")
-        try:
-            from app.providers import JSearchScraper
-            from app.modules.jobs.services.jsearch_parser import parse_jsearch_to_schema
-            scraper = JSearchScraper()
-            live_jobs = await scraper.search_jobs(
-                queries[0],
-                location=candidate_resume.location or "",
-                limit=10,
-            )
-            pool_data = []
-            for rj in live_jobs:
-                try:
-                    parsed = parse_jsearch_to_schema(rj)
-                    schema = JobSchema(
-                        id=parsed.external_id,
-                        external_id=parsed.external_id,
-                        provider_id=parsed.provider_id,
-                        title=parsed.title,
-                        company_name=parsed.company_name,
-                        location=parsed.location,
-                        apply_urls=parsed.apply_urls or [],
-                        description=parsed.description,
-                        posted_at=parsed.posted_at,
-                        skills_and_technologies=parsed.skills_and_technologies or [],
-                        responsibilities=parsed.responsibilities or [],
-                        job_types=parsed.job_types or [],
-                    )
-                    pool_data.append(schema.model_dump(mode='json'))
-                except Exception:
-                    pass
-            print(f"[JobSuggestion] Live seed produced {len(pool_data)} jobs.")
-        except Exception as e:
-            print(f"[JobSuggestion] Live seed failed: {e}. Returning empty pool.")
-            pool_data = []
+        print("[JobSuggestion] DB empty — seeding pool from live JSearch...")
+        from app.providers import JSearchScraper
+        from app.modules.jobs.services.jsearch_parser import parse_jsearch_to_schema
+        scraper = JSearchScraper()
+        pool_data = []
+        # Try top 3 queries so one bad query doesn't leave user with nothing
+        for q in queries[:3]:
+            if len(pool_data) >= WINDOW_SIZE:
+                break
+            try:
+                live_jobs = await scraper.search_jobs(
+                    q,
+                    location=candidate_resume.location or "",
+                    limit=10,
+                )
+                for rj in live_jobs:
+                    try:
+                        live_id = str(uuid.uuid4())
+                        parsed = parse_jsearch_to_schema(rj)
+                        parsed.id = live_id
+                        try:
+                            profile = _job_to_profile(parsed)
+                            parsed.fit_score = await compute_fit_score(
+                                profile=profile, candidate=candidate_resume
+                            )
+                        except Exception:
+                            pass
+                        pool_data.append(parsed.model_dump(mode='json'))
+                        # Store raw job so GET /jobs/details/{id} can find it (2h TTL)
+                        try:
+                            await r.setex(f"temp_job:{live_id}", 7200, rj.model_dump_json())
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"[JobSuggestion] Live seed failed for query '{q}': {e}")
 
-        # Store live seed in Redis
-        try:
-            await r.setex(_pool_key(user_id), POOL_TTL_SECONDS, json.dumps(pool_data))
-            await r.set(_offset_key(user_id), 0)
-        except Exception:
-            pass
+        print(f"[JobSuggestion] Live seed produced {len(pool_data)} jobs.")
+
+        if pool_data:
+            # Only cache if we actually got results; use short TTL so a retry happens soon
+            try:
+                await r.setex(_pool_key(user_id), POOL_TTL_SECONDS, json.dumps(pool_data))
+                await r.set(_offset_key(user_id), 0)
+            except Exception:
+                pass
+        else:
+            # Don't cache an empty pool — let the next request retry immediately
+            print("[JobSuggestion] Live seed returned nothing. Not caching empty pool.")
+
         await r.aclose()
         return _make_window(pool_data, 0)
 
@@ -230,25 +240,48 @@ async def build_suggestion_pool(
             provider_id=db_job.provider_id,
             title=db_job.title,
             company_name=db_job.company_name,
+            company_website=db_job.company_website,
+            publisher=db_job.publisher,
             location=db_job.location,
+            is_remote=db_job.is_remote,
             posted_at=db_job.posted_at,
+            deadline=db_job.deadline,
+            salary=db_job.salary,
+            experience_level=db_job.experience_level,
             apply_urls=db_job.apply_urls or [],
             description=db_job.description,
-            llm_summary=db_job.llm_summary,
             skills_and_technologies=db_job.skills_and_technologies or [],
             responsibilities=db_job.responsibilities or [],
+            qualifications=db_job.qualifications or [],
+            benefits=db_job.benefits or [],
             job_types=db_job.job_types or [],
             metadata=db_job.job_metadata or {},
         )
+
+        cache_key = f"fit_score:{user_id}:{str(db_job.id)}"
+        cached_raw = None
         try:
-            profile = _job_to_profile(db_job)
-            schema.fit_score = await compute_fit_score(
-                profile=profile,
-                candidate=candidate_resume,
-                semantic_similarity=semantic_sim,
-            )
-        except Exception as e:
-            print(f"[JobSuggestion] Fit score failed for {db_job.id}: {e}")
+            cached_raw = await r.get(cache_key)
+        except Exception:
+            pass
+
+        if cached_raw:
+            from app.schemas import FitScoreResponse
+            schema.fit_score = FitScoreResponse(**json.loads(cached_raw))
+        else:
+            try:
+                profile = _job_to_profile(db_job)
+                schema.fit_score = await compute_fit_score(
+                    profile=profile,
+                    candidate=candidate_resume,
+                    semantic_similarity=semantic_sim,
+                )
+                try:
+                    await r.setex(cache_key, 21600, schema.fit_score.model_dump_json())
+                except Exception:
+                    pass
+            except Exception as e:
+                print(f"[JobSuggestion] Fit score failed for {db_job.id}: {e}")
 
         pool_data.append(schema.model_dump(mode='json'))
 

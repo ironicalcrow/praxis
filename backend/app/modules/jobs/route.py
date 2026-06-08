@@ -53,13 +53,59 @@ async def live_search_jobs(
             page=request.page,
             num_pages=request.num_pages,
             country=request.country,
-            remote_jobs_only=request.remote_jobs_only,
         )
 
         return JobSearchResponse(query=request.query, total=len(jobs), jobs=jobs)
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/details/{job_id}/status")
+async def get_job_status(job_id: UUID, current_user=Depends(get_current_user)):
+    """
+    Returns which actions the user has taken for this job:
+    in_tracker, has_cover_letter, has_chat — for the frontend job card state.
+    """
+    from app.core.session import SessionLocal
+    from app.modules.application.models import Application
+    from app.modules.cover_letter.models import CoverLetter
+    from app.modules.chat.models import ChatConversation
+
+    job_id_str = str(job_id)
+    user_id = str(current_user.id)
+
+    with SessionLocal() as db:
+        application = (
+            db.query(Application)
+            .filter(Application.user_id == user_id, Application.job_id == job_id_str)
+            .first()
+        )
+        cover_letter = (
+            db.query(CoverLetter)
+            .filter(CoverLetter.user_id == user_id, CoverLetter.job_id == job_id_str)
+            .first()
+        )
+        conversation = (
+            db.query(ChatConversation)
+            .filter(
+                ChatConversation.user_id == user_id,
+                ChatConversation.job_id == job_id_str,
+                ChatConversation.context_type == "job",
+            )
+            .first()
+        )
+
+    return {
+        "job_id": job_id_str,
+        "in_tracker": application is not None,
+        "application_id": str(application.id) if application else None,
+        "application_status": application.status if application else None,
+        "has_cover_letter": cover_letter is not None,
+        "cover_letter_id": str(cover_letter.id) if cover_letter else None,
+        "has_chat": conversation is not None,
+        "conversation_id": str(conversation.id) if conversation else None,
+    }
 
 
 @router.get("/details/{job_id}", response_model=JobSchema)
@@ -196,7 +242,10 @@ async def update_preferences(prefs: UserPreferenceUpdate, current_user=Depends(g
                 candidate_resume = ResumeSchema(**resume_data)
                 resume_id = str(resume_data["id"])
                 import asyncio
-                asyncio.create_task(refresh_resume_job_queries(resume_id, candidate_resume))
+                pref_dict = prefs.model_dump(exclude_unset=True)
+                asyncio.create_task(
+                    refresh_resume_job_queries(resume_id, candidate_resume, user_preferences=pref_dict)
+                )
         except Exception as e:
             print(f"[Preferences] Background query refresh failed to start: {e}")
 

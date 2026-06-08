@@ -85,7 +85,9 @@ Notifications fire automatically from the following events:
 | Roadmap milestones converted to goals | `goals_created_from_roadmap` | `goals/route.py` |
 | Roadmap generated from conversation | `roadmap_generated` | `roadmap/route.py` |
 | Roadmap generated from job gap analysis | `roadmap_generated` | `roadmap/route.py` |
-| Coaching conversation summarized | `conversation_summarized` | `chat/route.py` |
+| Coaching conversation auto-summarized (session rotation) | `conversation_summarized` | `chat/service.py` |
+| Coaching session detects skill gap → nudge user to build roadmap | `coach_roadmap_nudge` | `chat/service.py` |
+| Cover letter draft generated | `cover_letter_ready` | `cover_letter/route.py` |
 
 ---
 
@@ -164,7 +166,7 @@ Every message pushed over WebSocket (both on-connect catch-up and real-time) is 
 ```sql
 CREATE TABLE notifications (
     id          VARCHAR PRIMARY KEY,
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id     VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     type        VARCHAR(50) NOT NULL,
     title       VARCHAR(255) NOT NULL,
     message     TEXT NOT NULL,

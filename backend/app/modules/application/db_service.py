@@ -1,5 +1,4 @@
 import uuid
-from uuid import UUID as PyUUID
 from datetime import datetime
 
 from fastapi import HTTPException
@@ -14,57 +13,41 @@ from app.modules.application.models import (
 )
 
 
-def parse_user_uuid(user_id: str):
-    """Convert string user_id into UUID object."""
-    try:
-        return PyUUID(str(user_id))
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid user_id. Expected UUID format.",
-        )
-
-
 def create_job_to_db(db, job_data: dict):
     """Create or reuse a job from job search result."""
 
+    # Reuse if frontend sent the DB id directly (suggestion pool jobs already exist)
+    explicit_id = job_data.get("id")
+    if explicit_id:
+        existing = db.query(Job).filter(Job.id == str(explicit_id)).first()
+        if existing:
+            return existing
+
     external_id = job_data.get("external_id")
-
-    existing_job = None
-
     if external_id:
-        existing_job = (
-            db.query(Job)
-            .filter(Job.external_id == external_id)
-            .first()
-        )
-
-    if existing_job:
-        return existing_job
-
-    job_id = str(uuid.uuid4())
+        existing = db.query(Job).filter(Job.external_id == external_id).first()
+        if existing:
+            return existing
 
     new_job = Job(
-        id=job_id,
+        id=str(uuid.uuid4()),
         external_id=external_id,
         title=job_data.get("title"),
-        company=job_data.get("company"),
-        company_logo=job_data.get("company_logo"),
+        company_name=job_data.get("company_name") or job_data.get("company", ""),
         company_website=job_data.get("company_website"),
         publisher=job_data.get("publisher"),
-        employment_type=job_data.get("employment_type"),
-        employment_types=job_data.get("employment_types"),
+        job_types=job_data.get("job_types"),
         location=job_data.get("location"),
-        city=job_data.get("city"),
-        state=job_data.get("state"),
-        country=job_data.get("country"),
         is_remote=job_data.get("is_remote", False),
-        apply_url=job_data.get("apply_url"),
-        is_direct_apply=job_data.get("is_direct_apply", False),
-        description_preview=job_data.get("description_preview"),
+        apply_urls=job_data.get("apply_urls"),
+        description=job_data.get("description"),
         salary=job_data.get("salary"),
-        source=job_data.get("source"),
-        raw_payload=job_data,
+        experience_level=job_data.get("experience_level"),
+        skills_and_technologies=job_data.get("skills_and_technologies"),
+        responsibilities=job_data.get("responsibilities"),
+        qualifications=job_data.get("qualifications"),
+        benefits=job_data.get("benefits"),
+        job_metadata=job_data,
     )
 
     db.add(new_job)
@@ -83,10 +66,11 @@ def create_application_to_db(
     apply_url: str | None = None,
     source: str | None = None,
     salary: str | None = None,
+    status: ApplicationStatus = ApplicationStatus.APPLIED,
 ):
     """Create an application."""
 
-    user_uuid = parse_user_uuid(user_id)
+    user_uuid = str(user_id)
 
     if job_id:
         existing_application = (
@@ -117,7 +101,7 @@ def create_application_to_db(
         apply_url=apply_url,
         source=source,
         salary=salary,
-        status=ApplicationStatus.APPLIED,
+        status=status,
         applied_at=datetime.utcnow(),
         last_status_changed_at=datetime.utcnow(),
         is_archived=False,
@@ -130,7 +114,7 @@ def create_application_to_db(
         db=db,
         application_id=application_id,
         old_status=None,
-        new_status=ApplicationStatus.APPLIED,
+        new_status=status,
         user_id=user_id,
     )
 
@@ -147,7 +131,7 @@ def create_application_status_history_to_db(
 ):
     """Create application status history."""
 
-    user_uuid = parse_user_uuid(user_id)
+    user_uuid = str(user_id)
 
     status_history = ApplicationStatusHistory(
         id=str(uuid.uuid4()),
@@ -165,26 +149,55 @@ def create_application_status_history_to_db(
 
 
 def create_application_from_job_db(user_id: str, job_data: dict):
-    """Create job first, then create application from that job."""
+    """Create job first, then create application from that job with status=applied.
+
+    If an application already exists with status=saved (e.g. bookmarked by chatbot),
+    promote it to applied instead of raising 409.
+    """
 
     db = get_session()
 
     try:
-        job = create_job_to_db(
-            db=db,
-            job_data=job_data,
+        job = create_job_to_db(db=db, job_data=job_data)
+
+        user_uuid = str(user_id)
+        existing = (
+            db.query(Application)
+            .filter(
+                Application.user_id == user_uuid,
+                Application.job_id == job.id,
+                Application.is_archived == False,
+            )
+            .first()
         )
 
+        if existing:
+            if existing.status == ApplicationStatus.SAVED:
+                existing.status = ApplicationStatus.APPLIED
+                existing.last_status_changed_at = datetime.utcnow()
+                create_application_status_history_to_db(
+                    db=db,
+                    application_id=existing.id,
+                    old_status=ApplicationStatus.SAVED,
+                    new_status=ApplicationStatus.APPLIED,
+                    user_id=user_id,
+                )
+                db.commit()
+                return {"application_id": existing.id, "job_id": job.id, "message": "Application promoted to applied"}
+            else:
+                raise HTTPException(status_code=409, detail="Application already exists for this job")
+
+        apply_url = (job.apply_urls[0] if job.apply_urls else None)
         application = create_application_to_db(
             db=db,
             user_id=user_id,
             job_id=job.id,
             job_title=job.title,
-            company=job.company,
+            company=job.company_name,
             location=job.location,
-            apply_url=job.apply_url,
-            source=job.source,
+            apply_url=apply_url,
             salary=job.salary,
+            status=ApplicationStatus.APPLIED,
         )
 
         db.commit()
@@ -268,7 +281,7 @@ def fetch_applications_from_db(
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         query = db.query(Application).filter(Application.user_id == user_uuid)
 
@@ -312,7 +325,7 @@ def fetch_kanban_applications_from_db(user_id: str):
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         applications = (
             db.query(Application)
@@ -363,7 +376,7 @@ def update_application_status_db(
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         application = (
             db.query(Application)
@@ -436,7 +449,7 @@ def add_application_note_db(
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         application = (
             db.query(Application)
@@ -496,7 +509,7 @@ def update_application_note_db(
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         note = (
             db.query(ApplicationNote)
@@ -544,7 +557,7 @@ def archive_application_db(user_id: str, application_id: str):
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         application = (
             db.query(Application)
@@ -591,7 +604,7 @@ def delete_application_db(user_id: str, application_id: str):
     db = get_session()
 
     try:
-        user_uuid = parse_user_uuid(user_id)
+        user_uuid = str(user_id)
 
         application = (
             db.query(Application)

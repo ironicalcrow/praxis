@@ -1,7 +1,8 @@
 import asyncio
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.modules.notifications.service import create_and_publish as notify
@@ -15,15 +16,104 @@ from app.modules.chat.schemas import (
     ConversationOut,
     SessionCreate,
     SessionOut,
+    SessionSummaryOut,
     ChatMessageIn,
     ChatMessageOut,
     ChatResponse,
+    SimpleMessageIn,
+    SimpleMessageOut,
 )
 
 router = APIRouter()
 
 
-# ── Conversations ──────────────────────────────────────────────────────────────
+# ── Zero-friction endpoints (user-facing) ─────────────────────────────────────
+
+@router.post("/message", response_model=SimpleMessageOut)
+async def send_simple_message(
+    body: SimpleMessageIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """General coaching chat — auto-manages conversation and session lifecycle."""
+    try:
+        result = await chat_service.send_message(
+            content=body.content,
+            user_id=str(current_user.id),
+            db=db,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+@router.post("/job/{job_id}/message", response_model=SimpleMessageOut)
+async def send_job_message(
+    job_id: UUID,
+    body: SimpleMessageIn,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Job-scoped coaching chat — conversation is tied to this specific job."""
+    try:
+        result = await chat_service.send_message(
+            content=body.content,
+            user_id=str(current_user.id),
+            db=db,
+            job_id=str(job_id),
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+
+
+@router.get("/history", response_model=list[ChatMessageOut])
+def get_chat_history(
+    limit: int = Query(default=20, le=50),
+    before: Optional[str] = Query(default=None, description="Message ID for cursor pagination"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Paginated message history for the general coaching chat (newest first)."""
+    conv = chat_db.get_or_create_general_conversation(db, str(current_user.id))
+    return chat_db.get_recent_messages(db, conv.id, limit=limit, before_id=before)
+
+
+@router.get("/job/{job_id}/history", response_model=list[ChatMessageOut])
+def get_job_chat_history(
+    job_id: UUID,
+    limit: int = Query(default=20, le=50),
+    before: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Paginated message history for a job-specific chat."""
+    conv = chat_db.get_or_create_job_conversation(db, str(current_user.id), str(job_id))
+    return chat_db.get_recent_messages(db, conv.id, limit=limit, before_id=before)
+
+
+@router.get("/sessions", response_model=list[SessionSummaryOut])
+def get_session_history(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """List of past sessions with summaries — powers the history cards UI."""
+    conv = chat_db.get_or_create_general_conversation(db, str(current_user.id))
+    return chat_db.get_session_summaries(db, conv.id)
+
+
+@router.get("/job/{job_id}/sessions", response_model=list[SessionSummaryOut])
+def get_job_session_history(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """List of past sessions for a job-specific chat."""
+    conv = chat_db.get_or_create_job_conversation(db, str(current_user.id), str(job_id))
+    return chat_db.get_session_summaries(db, conv.id)
+
+
+# ── Conversations (legacy — kept for backward compatibility) ───────────────────
 
 @router.post("/conversations", response_model=ConversationOut, status_code=201)
 def create_conversation(
