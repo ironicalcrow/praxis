@@ -1,6 +1,6 @@
 # CareerPilot — Codesprint 2026 Implementation Status
 
-CareerPilot is an AI-powered career management platform built for the Codesprint 2026 hackathon by Poridhi.io. The backend is a production-grade FastAPI service backed by PostgreSQL + pgvector, Redis (Upstash), ARQ background workers, Supabase Auth + Storage, Groq LLM, and Jina AI embeddings. This document maps every hackathon requirement to its current state.
+CareerPilot is an AI-powered career management platform built for the Codesprint 2026 hackathon by Poridhi.io. The backend is a production-grade FastAPI service backed by PostgreSQL + pgvector, Redis (Upstash), ARQ background workers, Supabase Auth + Storage, Groq LLM, and Jina AI embeddings. The frontend is a React/Vite SPA. This document maps every hackathon requirement to its current state.
 
 **Legend:** ✅ Done · ⚠️ Partial / needs improvement · ❌ Not built
 
@@ -18,6 +18,7 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | Supabase Storage file persistence | ✅ | `cvs/{user_id}/{uuid}.ext` bucket |
 | CV version history + re-activation | ✅ | `cv_uploads` table; `POST /api/cv/uploads/{id}/activate` re-parses & re-embeds |
 | Notification on upload + activation | ✅ | `cv_parsed` / `cv_activated` pushed via WebSocket |
+| Frontend CV upload UI | ✅ | `frontend/src/components/CV.jsx` — upload form, version history, activation |
 
 **What could improve:** OCR quality on low-res images (EasyOCR CPU mode); no multi-language CV support.
 
@@ -36,6 +37,7 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | Prefetch at 60% pool consumed, recycle at 100% | ✅ | ARQ background scrape triggered automatically |
 | Recency filter (30-day cutoff) | ✅ | pgvector query filters `posted_at >= NOW() - 30d OR NULL` |
 | Fallback if DB empty (live seed) | ✅ | JSearch live seed for first-time users |
+| Frontend Jobs UI | ✅ | `frontend/src/components/Jobs.jsx` — suggestion pool, live search, fit score cards |
 
 **What could improve:** No de-duplication across JSearch API key rotations. Salary data often missing (JSearch gap).
 
@@ -49,6 +51,7 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | Store / edit / download drafts | ✅ | `GET/PATCH/DELETE /api/cover-letter/{id}` — full CRUD on saved drafts |
 | Regenerate with tone control | ✅ | `tone` field: `professional`, `enthusiastic`, `concise` |
 | Notification on generation | ✅ | `cover_letter_ready` pushed via WebSocket |
+| Frontend Cover Letters UI | ✅ | `frontend/src/components/CoverLetters.jsx` — generate, view, edit drafts |
 
 ---
 
@@ -63,6 +66,7 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | Archive / soft-delete | ✅ | `PATCH /api/application/applications/{id}/archive` |
 | Status change history audit | ✅ | `application_status_history` table with old/new status + timestamp |
 | Notifications on status change | ✅ | applied / interviewing / offer / rejected push WebSocket alerts |
+| Frontend Applications UI | ✅ | `frontend/src/components/Applications.jsx` — kanban board, status changes, notes |
 
 ---
 
@@ -98,6 +102,8 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | Roadmap generation from chat | ✅ | `POST /api/roadmap/from-conversation` reads transcript → generates phases/milestones |
 | Notification on session summarized | ✅ | `conversation_summarized` pushed via WebSocket |
 | Roadmap nudge when skill gap detected in summary | ✅ | `coach_roadmap_nudge` notification fired after session rotation |
+| Frontend Chat UI | ✅ | `frontend/src/components/Chat.jsx` — general + job-scoped chat, session history |
+| Separate chatbot LLM caller | ✅ | `backend/app/core/chatbot_caller.py` — isolated from CV/job LLM calls |
 
 **Token budget per call:** ~1,680 tokens (system prompt + compressed CV + job context + 1 session summary + 10 recent messages + tool schemas). Down from ~6,000 in previous design.
 
@@ -115,6 +121,8 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | Goal status tracking (not_started → completed) | ✅ | not_started / in_progress / completed / paused |
 | Goal target date | ✅ | `target_date` field on every goal |
 | Notifications (roadmap generated, goals created, goal completed) | ✅ | `roadmap_generated`, `goals_created_from_roadmap`, `goal_completed` |
+| Frontend Roadmaps UI | ✅ | `frontend/src/components/Roadmaps.jsx` — roadmap list, phases, milestones |
+| Frontend Goals UI | ✅ | `frontend/src/components/Goals.jsx` — goal CRUD, status tracking |
 
 ---
 
@@ -142,6 +150,8 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | WebSocket real-time delivery | ✅ | Redis pub/sub → WebSocket per connection |
 | Offline catch-up (DB persistence) | ✅ | All notifications stored in `notifications` table; pushed on reconnect |
 | Multi-tab support | ✅ | NotificationManager handles multiple WS per user_id |
+| Frontend Notifications UI | ✅ | `frontend/src/components/Notifications.jsx` — live WS feed, mark read, history |
+| Frontend WS in App.jsx | ✅ | `createNotificationWS()` in `api.js`; live toast-style feed in header |
 | Scheduled / proactive nudges | ❌ | No cron-based "apply 3 jobs this week" or inactivity reminders |
 | Deadline reminders | ❌ | No date-triggered notification scheduler |
 
@@ -174,10 +184,13 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | Supabase Auth (JWT) | ✅ | Bearer token on all endpoints; WS via query param |
 | Supabase Storage | ✅ | CV file upload to `cvs/` bucket |
 | ARQ background worker | ✅ | Job scraping CRON (6h), cleanup CRON (daily @ 01:00) |
-| Groq LLM (llama-3.3-70b-versatile) | ✅ | CV parsing, query gen, fit scoring, roadmap, chat, summarization |
+| Groq LLM (llama-3.3-70b-versatile) | ✅ | CV parsing, query gen, fit scoring, roadmap, summarization |
+| Groq LLM — chatbot (chatbot_caller.py) | ✅ | Separate caller for chat; isolated token budget |
 | Jina AI embeddings (jina-embeddings-v2-base-en) | ✅ | 768-dim vectors for resumes, jobs, preferences |
 | JSearch API (RapidAPI) | ✅ | Live job scraping, 3-key rotation |
-| Frontend | ❌ | Backend-only; no web or mobile UI |
+| Providers abstraction layer | ✅ | `backend/app/providers/` — base.py + jsearch.py; ready for additional job providers |
+| React/Vite frontend | ✅ | `frontend/` — 8 feature components, full API client, WS integration |
+| Frontend production build | ✅ | `frontend/dist/` — compiled and ready to serve |
 | Dockerfile / docker-compose | ❌ | No containerization |
 | CI/CD | ❌ | No GitHub Actions |
 
@@ -188,11 +201,11 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 | Deliverable | Status | Notes |
 |-------------|--------|-------|
 | Functional AI-powered backend | ✅ | 40+ endpoints, production-grade |
-| README.md with setup + env var guide | ❌ | `feature.md` is detailed but not a user-facing setup guide |
-| Architecture diagram | ❌ | ASCII flow in `feature.md`; no visual diagram |
-| Frontend application (web or mobile) | ❌ | Not started |
+| README.md with setup + env var guide | ✅ | 173-line guide — local setup, env vars, backend + frontend + worker |
+| Architecture diagram | ❌ | No visual diagram committed |
+| Frontend application (web or mobile) | ✅ | React/Vite SPA — all 8 pillars covered |
 | System Design Document (bonus) | ❌ | `feature.md` covers architecture; not formatted as a formal SDD |
-| Evaluation Suite — 5+ test cases (bonus) | ❌ | `tests/` directory exists but is empty |
+| Evaluation Suite — 5+ test cases (bonus) | ⚠️ | 5 smoke tests exist (root, health, docs, openapi, auth guard); no functional flow tests |
 
 ---
 
@@ -200,46 +213,38 @@ CareerPilot is an AI-powered career management platform built for the Codesprint
 
 Ordered by hackathon scoring impact (highest first):
 
-### 1. README.md — Setup Guide (High impact, low effort)
-- Local run instructions (`uvicorn main:app --reload`)
-- All env vars with descriptions
-- How to run the ARQ worker
-- DB migration / table creation steps
-- How to test with Swagger UI
+### 1. Architecture Diagram (Required deliverable, low effort)
+- Draw.io or Excalidraw diagram showing: User → React → FastAPI → PostgreSQL/pgvector/Redis/Supabase/Groq/Jina/JSearch
+- Export as PNG, commit to repo root
 
-### 2. Progress Dashboard (High impact, medium effort)
+### 2. Evaluation Suite — Functional Tests (Bonus, medium effort)
+Current: 5 smoke tests only. Need functional flow tests:
+- CV upload + parse verification
+- Job suggestion pool build + window advance
+- Fit score computation
+- Application status change + history
+- Notification delivery (WebSocket or DB check)
+- Cover letter generation
+
+### 3. Progress Dashboard (High impact, medium effort)
 - `GET /api/dashboard/stats` — application counts, goal completion %, this-week activity
 - `user_activity` table for streak tracking
 - Consider adding a `GET /api/dashboard/feed` combining notifications + status changes
 
-### 3. Calendar / To-Do (Medium impact, medium effort)
+### 4. Calendar / To-Do (Medium impact, medium effort)
 - `todos` table + CRUD endpoints
 - Deadline reminders via ARQ CRON
 
-### 4. AI Nudges — Proactive Scheduling (Medium impact, medium effort)
+### 5. AI Nudges — Proactive Scheduling (Medium impact, medium effort)
 - ARQ CRON: inactivity nudge (7-day no application)
 - ARQ CRON: goal deadline reminder (2 days before target_date)
 - ARQ CRON: weekly recap ("You applied to X jobs this week")
 
-### 5. Job Readiness + Skill Gap Endpoints (Medium impact, low effort)
-- `POST /api/jobs/{job_id}/readiness` — reuses `compute_fit_score`; returns structured JSON verdict
-- `POST /api/jobs/{job_id}/skill-gap` — matched vs missing skills JSON
-
-### 6. Architecture Diagram (Required deliverable, low effort)
-- Draw.io or Excalidraw diagram showing: User → FastAPI → PostgreSQL/pgvector/Redis/Supabase/Groq/Jina/JSearch
-- Export as PNG, commit to repo root
-
-### 7. Evaluation Suite (Bonus, medium effort)
-- 5+ test cases using `pytest` + `httpx.AsyncClient`
-- Suggested: CV upload flow, job suggestion pool, fit score computation, application status change, notification delivery
-
-### 8. Frontend (High impact, high effort)
-- Next.js or React app
-- Key pages: Dashboard, CV Upload, Job Feed (suggestion pool), Kanban Board, Chat, Roadmap Viewer, Notifications
-
 ---
 
-## File Structure (Backend)
+## File Structure
+
+### Backend
 
 ```
 backend/
@@ -251,23 +256,67 @@ backend/
 │   ├── core/
 │   │   ├── config.py                — Settings (env vars via pydantic-settings)
 │   │   ├── session.py               — SQLAlchemy SessionLocal + Base
-│   │   ├── llm_caller.py            — Groq LLM + Jina embed_text()
+│   │   ├── llm_caller.py            — Groq LLM + Jina embed_text() (CV/job/roadmap)
+│   │   ├── chatbot_caller.py        — Groq LLM caller isolated for chat sessions
+│   │   ├── supabase.py              — Supabase client (auth + storage)
 │   │   ├── supabase_storage.py      — CV upload/download to Supabase bucket
+│   │   ├── utils.py                 — Shared utilities
 │   │   └── worker.py                — ARQ worker + CRON tasks
+│   ├── providers/                   — Abstracted job data provider layer
+│   │   ├── base.py                  — Abstract base provider interface
+│   │   ├── jsearch.py               — JSearch RapidAPI provider
+│   │   └── schemas.py               — Provider-agnostic job schemas
 │   └── modules/
 │       ├── auth/                    — register, login, logout, me
 │       ├── CV/                      — upload, parse, embed, version history
 │       ├── jobs/                    — live search, suggestion pool, fit scorer, queries
+│       │   └── services/
+│       │       ├── fit_scorer.py    — compute_fit_score (skill overlap + cosine)
+│       │       ├── job_suggestion.py — suggestion pool build/advance/invalidate
+│       │       ├── query_service.py — LLM query generation + fallback
+│       │       ├── jsearch_parser.py — JSearch JSON → JobSchema
+│       │       └── deduplicator.py  — raw job deduplication
 │       ├── application/             — tracker, kanban, notes, status history
-│       ├── chat/                    — conversations, sessions, messages, summarize
+│       ├── chat/                    — conversations, sessions, messages, summarize, tools
+│       ├── cover_letter/            — generate, CRUD drafts
 │       ├── roadmap/                 — generate (from chat/job/manual), CRUD
 │       ├── goals/                   — CRUD, from-roadmap promotion
 │       └── notifications/           — WebSocket, DB, REST, Redis pub/sub
+├── tests/
+│   ├── conftest.py                  — (minimal; test DB setup pending)
+│   └── test_api.py                  — 5 smoke tests (root, health, docs, openapi, auth guard)
 ├── feature.md                       — Detailed implementation reference
 ├── notification.md                  — Notification system architecture
+├── ai.md                            — AI assistant (chat) guide
 └── data.md                          — Test credentials
+```
+
+### Frontend
+
+```
+frontend/
+├── src/
+│   ├── main.jsx                     — React entrypoint
+│   ├── App.jsx                      — Tab shell + WS lifecycle + header
+│   ├── AuthContext.jsx              — Supabase auth state (login/logout/user)
+│   ├── api.js                       — Full API client + createNotificationWS()
+│   ├── index.css                    — Global styles (glass morphism design system)
+│   └── components/
+│       ├── Auth.jsx                 — Login / register form
+│       ├── CV.jsx                   — Upload, version history, activate
+│       ├── Jobs.jsx                 — Suggestion pool, live search, fit score cards
+│       ├── Applications.jsx         — Kanban board, status changes, notes
+│       ├── Chat.jsx                 — General + job-scoped coach chat
+│       ├── CoverLetters.jsx         — Generate, view, edit drafts
+│       ├── Roadmaps.jsx             — Roadmap list, phases, milestones
+│       ├── Goals.jsx                — Goal CRUD, status tracking
+│       ├── Notifications.jsx        — Notification history, mark read
+│       └── ui.jsx                   — Shared UI primitives (Spinner, etc.)
+├── dist/                            — Production build output
+├── package.json                     — React 18 + Vite
+└── vite.config.js                   — Dev server on port 3000
 ```
 
 ---
 
-*Generated: 2026-06-08 | Branch: `backend/notifications` | Hackathon: Codesprint 2026 by Poridhi.io*
+*Updated: 2026-06-09 | Branch: `ai_enhancement` | Hackathon: Codesprint 2026 by Poridhi.io*

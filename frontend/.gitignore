@@ -1,1 +1,26 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Vite cache
+.vite/
+
+# Editor / OS
+.DS_Store
+*.local
+.idea/
+.vscode/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
