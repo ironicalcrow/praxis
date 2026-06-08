@@ -40,14 +40,26 @@ Praxis is an AI-powered career management platform built for the Codesprint 2026
    ```
 
 4. Configure Environment Variables. Create a `.env` file in the `backend` directory with the following keys:
-   - `DATABASE_URL`
-   - `REDIS_URL`
-   - `SUPABASE_URL`
-   - `SUPABASE_KEY`
-   - `GROQ_API_KEY`
-   - `JINA_API_KEY`
-   - `RAPIDAPI_KEY` (for JSearch)
-   - `JWT_SECRET` (if applicable)
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_STORAGE_BUCKET=cvs
+
+DATABASE_URL=
+
+REDIS_URL=
+
+LLM_FALLBACK_API_KEY=
+LLM_FALLBACK_BASE_URL=https://api.groq.com/openai/v1
+LLM_FALLBACK_MODEL=llama-3.3-70b-versatile
+
+CHATBOT_FALLBACK_API_KEY=
+CHATBOT_FALLBACK_BASE_URL=https://api.groq.com/openai/v1
+CHATBOT_FALLBACK_MODEL=llama-3.3-70b-versatile
+
+EMBEDDING_FALLBACK_API_KEY=
+EMBEDDING_FALLBACK_BASE_URL=https://api.jina.ai/v1
+EMBEDDING_FALLBACK_MODEL=jina-embeddings-v2-base-en
 
 5. Run the database migrations (if any) or ensure the DB is setup. The backend automatically creates tables on startup if `Base.metadata.create_all` is enabled.
 
