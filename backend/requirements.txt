@@ -74,8 +74,6 @@ pluggy==1.6.0
 postgrest==2.27.2
 propcache==0.4.1
 psycopg-binary==3.2.13
-psycopg2==2.9.12
-psycopg2-binary==2.9.11
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pyclipper==1.4.0
