@@ -4,7 +4,13 @@ import docx
 import easyocr
 from app.modules.CV.service import extract_resume_with_grok
 
-ocr_reader= easyocr.Reader(["en"],gpu=False)
+_ocr_reader = None
+
+def _get_ocr_reader():
+    global _ocr_reader
+    if _ocr_reader is None:
+        _ocr_reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+    return _ocr_reader
 
 def extract_text_from_pdf(file_path:str):
     text= ""
@@ -19,7 +25,7 @@ def extract_text_from_docx(file_path:str):
     return "\n".join([paragraph.text for paragraph in doc.paragraphs])
 
 def extract_text_from_image(file_path:str):
-    text= ocr_reader.readtext(file_path,detail=0)
+    text= _get_ocr_reader().readtext(file_path,detail=0)
     return "\n".join(text)
 
 def text_extractor(file_path:str):
