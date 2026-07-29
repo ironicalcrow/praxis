@@ -162,10 +162,25 @@ arq app.core.worker.WorkerSettings
 
 ### Run Backend Tests
 
+Tests live in `tests/` at the **repo root** (not under `backend/`) and drive the
+API through FastAPI's `TestClient`. Run them from the repo root:
+
 ```bash
-# macOS / Windows (from backend/ with venv active)
-python -m pytest tests/ -v
+make test-install    # one time — installs pytest into backend/.venv
+make test            # whole suite
+make test-bugs       # only the bug reproductions (see BUG_REPORT.md)
+make test-cov        # coverage report
 ```
+
+Or without make:
+
+```bash
+backend/.venv/bin/pip install -r backend/requirements-dev.txt
+backend/.venv/bin/pytest
+```
+
+See [`tests/README.md`](tests/README.md) for the layout, fixtures, and why the
+`bug`-marked tests are expected to pass.
 
 ---
 
@@ -232,8 +247,17 @@ praxis/
 │   │   └── modules/             # auth, cv, jobs, application,
 │   │       ...                  # chat, roadmap, goals,
 │   │                            # notifications, cover_letter
-│   └── tests/
-│       └── test_core.py         # 5 guaranteed-pass unit tests
+│   └── requirements-dev.txt     # pytest & friends
+├── tests/                       # HTTP-layer tests (see tests/README.md)
+│   ├── conftest.py              # fixtures + env bootstrap
+│   ├── helpers.py               # row builders
+│   ├── api/                     # one file per router
+│   ├── schemas/                 # Pydantic contracts
+│   └── flows/                   # cross-module journeys
+├── BUG_REPORT.md                # confirmed bugs, each with a reproduction
+├── ENDPOINT_TESTS.md            # manual test guide, all 63 endpoints
+├── praxis.postman_collection.json
+├── pytest.ini
 └── frontend/
     ├── index.html
     ├── vite.config.js

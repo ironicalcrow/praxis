@@ -1,0 +1,8 @@
+# Test-only dependencies. Install alongside requirements.txt:
+#   pip install -r requirements.txt -r requirements-dev.txt
+pytest==8.4.2
+pytest-asyncio==1.2.0
+pytest-cov==7.0.0
+# Safety net: WebSocket reads block forever if the server sends nothing,
+# so a hung test must fail rather than stall the suite.
+pytest-timeout==2.4.0
